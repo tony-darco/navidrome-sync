@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"net/http/httputil"
+	"net/url"
 	"time"
 
 	"navidrome-sync/config"
@@ -28,6 +30,21 @@ func main() {
 		state := h.CurrentState()
 		json.NewEncoder(w).Encode(state)
 	})
+	http.HandleFunc("/api/config", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]string{
+			"authParams": fmt.Sprintf("u=%s&p=%s&v=1.16.1&c=navidrome-sync&f=json", cfg.Username, cfg.Password),
+		})
+	})
+
+	// Reverse proxy for Navidrome Subsonic API — avoids CORS issues.
+	ndURL, _ := url.Parse(cfg.NavidromeURL)
+	ndProxy := httputil.NewSingleHostReverseProxy(ndURL)
+	http.HandleFunc("/rest/", func(w http.ResponseWriter, r *http.Request) {
+		r.Host = ndURL.Host
+		ndProxy.ServeHTTP(w, r)
+	})
+
 	http.Handle("/", http.FileServer(http.Dir("./static")))
 
 	addr := fmt.Sprintf(":%d", cfg.Port)

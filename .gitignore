@@ -1,2 +1,4 @@
 .env
 navidrome-sync
+web/node_modules/
+web/dist/

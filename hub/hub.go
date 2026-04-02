@@ -221,12 +221,29 @@ func (h *Hub) handleMessage(msg inboundMessage) {
 }
 
 // onRegisterMsg handles an explicit REGISTER message that carries clientType.
+// It also adopts the client-provided clientId so both sides agree on the ID.
 func (h *Hub) onRegisterMsg(msg inboundMessage) {
 	payload := parsePayloadMap(msg.envelope.Payload)
+
 	h.mu.Lock()
 	msg.client.ClientType = payload["clientType"]
+
+	// Adopt the client-provided ID so the frontend and server agree.
+	if newID := msg.envelope.ClientID; newID != "" && newID != msg.client.ID {
+		oldID := msg.client.ID
+		delete(h.clients, oldID)
+		msg.client.ID = newID
+		h.clients[newID] = msg.client
+		if h.activeClientID == oldID {
+			h.activeClientID = newID
+		}
+	}
 	h.mu.Unlock()
+
 	log.Printf("client set type id=%s type=%s", msg.client.ID, msg.client.ClientType)
+
+	// Re-broadcast so every client (including this one) gets the updated ID.
+	h.broadcastStateSync()
 }
 
 // onNowPlaying updates the shared state from a client report and broadcasts.
@@ -246,6 +263,7 @@ func (h *Hub) onNowPlaying(msg inboundMessage) {
 	h.state = &np
 	h.mu.Unlock()
 
+	log.Printf("now playing updated client=%s song=%q artist=%q", msg.client.ID, np.Title, np.Artist)
 	h.broadcastStateSync()
 }
 
@@ -273,6 +291,7 @@ func (h *Hub) onPositionUpdate(msg inboundMessage) {
 
 // onClaim lets any client claim the active role.
 func (h *Hub) onClaim(msg inboundMessage) {
+	log.Printf("claim requested client=%s", msg.client.ID)
 	h.mu.Lock()
 	prevActiveID := h.activeClientID
 	prevClient := h.clients[prevActiveID]

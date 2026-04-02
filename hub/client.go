@@ -52,7 +52,11 @@ func (c *Client) readPump() {
 			c.sendError("INVALID_JSON", "malformed message")
 			continue
 		}
-		env.ClientID = c.ID // always trust the server-assigned ID
+		// For REGISTER messages, preserve the client-provided clientId
+		// so the hub can adopt it. For all others, use the server-assigned ID.
+		if env.Type != MsgRegister {
+			env.ClientID = c.ID
+		}
 		c.hub.incoming <- inboundMessage{client: c, envelope: env}
 	}
 }
