@@ -101,8 +101,7 @@ func (c *Client) sendJSON(v any) {
 
 func (c *Client) sendError(code, message string) {
 	c.sendJSON(Envelope{
-		Type:     "ERROR",
-		ClientID: c.ID,
+		Type: "ERROR",
 		Payload: map[string]string{
 			"code":    code,
 			"message": message,

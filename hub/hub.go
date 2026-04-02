@@ -16,14 +16,15 @@ import (
 
 const (
 	// Inbound
-	MsgRegister   = "REGISTER"
-	MsgNowPlaying = "NOW_PLAYING"
-	MsgClaim      = "CLAIM"
-	MsgPlay       = "PLAY"
-	MsgPause      = "PAUSE"
-	MsgNext       = "NEXT"
-	MsgPrev       = "PREV"
-	MsgSeek       = "SEEK"
+	MsgRegister       = "REGISTER"
+	MsgNowPlaying     = "NOW_PLAYING"
+	MsgPositionUpdate = "POSITION_UPDATE"
+	MsgClaim          = "CLAIM"
+	MsgPlay           = "PLAY"
+	MsgPause          = "PAUSE"
+	MsgNext           = "NEXT"
+	MsgPrev           = "PREV"
+	MsgSeek           = "SEEK"
 
 	// Outbound
 	MsgStateSync  = "STATE_SYNC"
@@ -33,20 +34,29 @@ const (
 )
 
 // Envelope is the wire format for every WebSocket message.
+// Inbound messages include clientId; outbound messages omit it.
 type Envelope struct {
 	Type     string `json:"type"`
-	ClientID string `json:"clientId"`
+	ClientID string `json:"clientId,omitempty"`
 	Payload  any    `json:"payload"`
 }
 
 // NowPlayingState is the shared playback state held by the hub.
 type NowPlayingState struct {
-	SongID       string `json:"songId,omitempty"`
-	Title        string `json:"title,omitempty"`
-	Artist       string `json:"artist,omitempty"`
-	Album        string `json:"album,omitempty"`
-	CoverArtID   string `json:"coverArtId,omitempty"`
-	DurationSecs int    `json:"durationSecs,omitempty"`
+	SongID       string  `json:"songId,omitempty"`
+	Title        string  `json:"title,omitempty"`
+	Artist       string  `json:"artist,omitempty"`
+	Album        string  `json:"album,omitempty"`
+	CoverArtID   string  `json:"coverArtId,omitempty"`
+	DurationSecs int     `json:"durationSecs,omitempty"`
+	PositionSecs float64 `json:"positionSecs"`
+}
+
+// clientInfo is the per-client summary included in STATE_SYNC broadcasts.
+type clientInfo struct {
+	ClientID   string `json:"clientId"`
+	ClientType string `json:"clientType"`
+	Role       string `json:"role"`
 }
 
 type inboundMessage struct {
@@ -161,9 +171,11 @@ func (h *Hub) handleRegister(c *Client) {
 
 	// Inform the client of its role and current state.
 	c.sendJSON(Envelope{
-		Type:     MsgRoleChange,
-		ClientID: c.ID,
-		Payload:  map[string]string{"role": c.Role},
+		Type: MsgRoleChange,
+		Payload: map[string]string{
+			"clientId": c.ID,
+			"role":     c.Role,
+		},
 	})
 	h.sendStateSyncTo(c)
 }
@@ -197,6 +209,8 @@ func (h *Hub) handleMessage(msg inboundMessage) {
 		h.onRegisterMsg(msg)
 	case MsgNowPlaying:
 		h.onNowPlaying(msg)
+	case MsgPositionUpdate:
+		h.onPositionUpdate(msg)
 	case MsgClaim:
 		h.onClaim(msg)
 	case MsgPlay, MsgPause, MsgNext, MsgPrev, MsgSeek:
@@ -235,6 +249,28 @@ func (h *Hub) onNowPlaying(msg inboundMessage) {
 	h.broadcastStateSync()
 }
 
+// onPositionUpdate accepts a position report from the active client and updates
+// the hub state. This is sent periodically (~1s) by the active client so that
+// observers (and future CLAIM recipients) know the current playback position.
+func (h *Hub) onPositionUpdate(msg inboundMessage) {
+	h.mu.Lock()
+	if msg.client.ID != h.activeClientID {
+		h.mu.Unlock()
+		msg.client.sendError("NOT_ACTIVE", "only the active client may send position updates")
+		return
+	}
+	if h.state != nil {
+		if pm, ok := msg.envelope.Payload.(map[string]any); ok {
+			if pos, ok := pm["positionSecs"].(float64); ok {
+				h.state.PositionSecs = pos
+			}
+		}
+	}
+	h.mu.Unlock()
+	// No broadcast — observers interpolate locally. The next STATE_SYNC
+	// (on song change, claim, etc.) will carry the latest position.
+}
+
 // onClaim lets any client claim the active role.
 func (h *Hub) onClaim(msg inboundMessage) {
 	h.mu.Lock()
@@ -253,17 +289,21 @@ func (h *Hub) onClaim(msg inboundMessage) {
 	// Notify the displaced client of its new role.
 	if prevClient != nil && prevClient.ID != msg.client.ID {
 		prevClient.sendJSON(Envelope{
-			Type:     MsgRoleChange,
-			ClientID: prevClient.ID,
-			Payload:  map[string]string{"role": "observer"},
+			Type: MsgRoleChange,
+			Payload: map[string]string{
+				"clientId": prevClient.ID,
+				"role":     "observer",
+			},
 		})
 	}
 
 	// Confirm the new active client's role.
 	msg.client.sendJSON(Envelope{
-		Type:     MsgRoleChange,
-		ClientID: msg.client.ID,
-		Payload:  map[string]string{"role": "active"},
+		Type: MsgRoleChange,
+		Payload: map[string]string{
+			"clientId": msg.client.ID,
+			"role":     "active",
+		},
 	})
 
 	h.broadcastStateSync()
@@ -286,55 +326,64 @@ func (h *Hub) onTransportCommand(msg inboundMessage) {
 		return
 	}
 
+	// Extract positionSecs from SEEK payload, nil for other commands.
+	var positionSecs any
+	if msg.envelope.Type == MsgSeek {
+		if pm, ok := msg.envelope.Payload.(map[string]any); ok {
+			positionSecs = pm["positionSecs"]
+		}
+	}
+
 	activeClient.sendJSON(Envelope{
-		Type:     MsgCommand,
-		ClientID: msg.client.ID,
+		Type: MsgCommand,
 		Payload: map[string]any{
-			"command": msg.envelope.Type,
-			"data":    msg.envelope.Payload,
+			"action":       msg.envelope.Type,
+			"positionSecs": positionSecs,
 		},
 	})
 }
 
 // --- Broadcasting helpers ---
 
+// buildStateSyncPayload constructs the STATE_SYNC payload snapshot.
+// Must be called while h.mu is at least read-locked.
+func (h *Hub) buildStateSyncPayload() map[string]any {
+	ci := make([]clientInfo, 0, len(h.clients))
+	for _, c := range h.clients {
+		ci = append(ci, clientInfo{
+			ClientID:   c.ID,
+			ClientType: c.ClientType,
+			Role:       c.Role,
+		})
+	}
+	return map[string]any{
+		"activeClientId": h.activeClientID,
+		"song":           h.state,
+		"clients":        ci,
+	}
+}
+
 func (h *Hub) broadcastStateSync() {
 	h.mu.RLock()
-	state := h.state
-	activeID := h.activeClientID
+	payload := h.buildStateSyncPayload()
 	clients := make([]*Client, 0, len(h.clients))
 	for _, c := range h.clients {
 		clients = append(clients, c)
 	}
 	h.mu.RUnlock()
 
-	env := Envelope{
-		Type: MsgStateSync,
-		Payload: map[string]any{
-			"nowPlaying":     state,
-			"activeClientId": activeID,
-		},
-	}
+	env := Envelope{Type: MsgStateSync, Payload: payload}
 	for _, c := range clients {
-		env.ClientID = c.ID
 		c.sendJSON(env)
 	}
 }
 
 func (h *Hub) sendStateSyncTo(c *Client) {
 	h.mu.RLock()
-	state := h.state
-	activeID := h.activeClientID
+	payload := h.buildStateSyncPayload()
 	h.mu.RUnlock()
 
-	c.sendJSON(Envelope{
-		Type:     MsgStateSync,
-		ClientID: c.ID,
-		Payload: map[string]any{
-			"nowPlaying":     state,
-			"activeClientId": activeID,
-		},
-	})
+	c.sendJSON(Envelope{Type: MsgStateSync, Payload: payload})
 }
 
 // parsePayloadMap is a small helper to coerce the Payload (which arrives as
