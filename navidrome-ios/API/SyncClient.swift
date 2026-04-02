@@ -46,12 +46,6 @@ nonisolated final class SyncClient: @unchecked Sendable {
         // Send REGISTER once the socket is ready, then start listening
         sendRegister()
         receiveLoop()
-
-        // Fire onConnected after first successful receive starts,
-        // but optimistically signal now — receiveLoop will handle disconnects.
-        DispatchQueue.main.async { [weak self] in
-            self?.onConnected?()
-        }
     }
 
     private func sendRegister() {
@@ -94,6 +88,10 @@ nonisolated final class SyncClient: @unchecked Sendable {
             guard let self else { return }
             switch result {
             case .success(let message):
+                // Mark connected on first successful receive
+                DispatchQueue.main.async {
+                    self.onConnected?()
+                }
                 switch message {
                 case .string(let text):
                     if let data = text.data(using: .utf8),

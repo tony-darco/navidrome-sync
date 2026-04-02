@@ -14,6 +14,13 @@ nonisolated enum AppConfig {
         set { defaults.set(newValue, forKey: "serverURL") }
     }
 
+    /// Base URL of the Go sync service (e.g. "http://192.168.1.116:8080").
+    /// Only needed for multi-client sync. Leave nil for standalone mode.
+    static var syncServiceURL: String? {
+        get { defaults.string(forKey: "syncServiceURL") }
+        set { defaults.set(newValue, forKey: "syncServiceURL") }
+    }
+
     /// Navidrome username.
     static var username: String? {
         get { loadFromKeychain(key: "navidrome_username") }
@@ -56,6 +63,7 @@ nonisolated enum AppConfig {
     /// Clear all stored credentials and server info.
     static func logout() {
         serverURL = nil
+        syncServiceURL = nil
         username = nil
         password = nil
     }

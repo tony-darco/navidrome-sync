@@ -77,23 +77,15 @@ final class SyncStore: ObservableObject {
             Task { @MainActor in self?.isConnected = false }
         }
 
-        // Reconnect on foreground
-        NotificationCenter.default.addObserver(
-            forName: UIApplication.willEnterForegroundNotification,
-            object: nil,
-            queue: .main
-        ) { [weak self] _ in
-            Task { @MainActor in
-                guard let self, !self.isConnected else { return }
-                self.connect()
-            }
-        }
+
     }
 
     // MARK: - Connection
 
+    /// Connect to the Go sync service. Only works if a sync service URL is configured
+    /// (separate from the Navidrome server URL).
     func connect() {
-        guard let base = AppConfig.serverURL else { return }
+        guard let base = AppConfig.syncServiceURL, !base.isEmpty else { return }
         syncClient.connect(baseURL: base, clientId: myClientId)
         startPositionReporting()
     }
@@ -108,40 +100,48 @@ final class SyncStore: ObservableObject {
 
     func playSong(_ song: NowPlayingSong) {
         if myRole != "active" {
-            sendMessage(type: .claim)
+            if isConnected {
+                sendMessage(type: .claim)
+            } else {
+                becomeActiveLocally()
+            }
         }
         queue = [song]
         queueIndex = 0
         loadAndPlay(song)
-        sendNowPlaying(song)
+        if isConnected { sendNowPlaying(song) }
     }
 
     func playQueue(_ songs: [NowPlayingSong], startIndex: Int) {
         guard startIndex < songs.count else { return }
         if myRole != "active" {
-            sendMessage(type: .claim)
+            if isConnected {
+                sendMessage(type: .claim)
+            } else {
+                becomeActiveLocally()
+            }
         }
         queue = songs
         queueIndex = startIndex
         let song = songs[startIndex]
         loadAndPlay(song)
-        sendNowPlaying(song)
+        if isConnected { sendNowPlaying(song) }
     }
 
     func play() {
         audioPlayer.resume()
-        sendMessage(type: .play)
+        if isConnected { sendMessage(type: .play) }
     }
 
     func pause() {
         audioPlayer.pause()
-        sendMessage(type: .pause)
+        if isConnected { sendMessage(type: .pause) }
     }
 
     func seek(to positionSecs: Double) {
         audioPlayer.seek(to: positionSecs)
         position = positionSecs
-        sendMessage(type: .seek, payload: SeekPayload(positionSecs: positionSecs))
+        if isConnected { sendMessage(type: .seek, payload: SeekPayload(positionSecs: positionSecs)) }
     }
 
     func next() {
@@ -150,10 +150,14 @@ final class SyncStore: ObservableObject {
         queueIndex = nextIndex
         let song = queue[nextIndex]
         if myRole != "active" {
-            sendMessage(type: .claim)
+            if isConnected {
+                sendMessage(type: .claim)
+            } else {
+                becomeActiveLocally()
+            }
         }
         loadAndPlay(song)
-        sendNowPlaying(song)
+        if isConnected { sendNowPlaying(song) }
     }
 
     func prev() {
@@ -170,14 +174,29 @@ final class SyncStore: ObservableObject {
         queueIndex = prevIndex
         let song = queue[prevIndex]
         if myRole != "active" {
-            sendMessage(type: .claim)
+            if isConnected {
+                sendMessage(type: .claim)
+            } else {
+                becomeActiveLocally()
+            }
         }
         loadAndPlay(song)
-        sendNowPlaying(song)
+        if isConnected { sendNowPlaying(song) }
     }
 
     func claim() {
-        sendMessage(type: .claim)
+        if isConnected {
+            sendMessage(type: .claim)
+        } else {
+            becomeActiveLocally()
+        }
+    }
+
+    /// Become the active client locally without waiting for sync service confirmation.
+    private func becomeActiveLocally() {
+        myRole = "active"
+        stopInterpolation()
+        startPositionReporting()
     }
 
     // MARK: - Private helpers

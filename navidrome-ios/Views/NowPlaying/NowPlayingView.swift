@@ -73,11 +73,13 @@ struct NowPlayingView: View {
                 PlayHereButton()
             }
 
-            // Role badge
-            roleBadge
+            // Role badge (only when sync is active)
+            if store.isConnected {
+                roleBadge
 
-            // Connected clients
-            clientsList
+                // Connected clients
+                clientsList
+            }
 
             Spacer()
         }

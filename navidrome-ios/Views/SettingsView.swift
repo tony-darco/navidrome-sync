@@ -3,20 +3,21 @@ import SwiftUI
 struct SettingsView: View {
     @EnvironmentObject private var store: SyncStore
     @Binding var isLoggedIn: Bool
+    @State private var syncURL: String = AppConfig.syncServiceURL ?? ""
 
     var body: some View {
         NavigationStack {
             List {
-                // Connection status
-                Section("Connection") {
+                // Playback status
+                Section("Status") {
                     HStack {
-                        Text("Status")
+                        Text("Backend")
                         Spacer()
                         HStack(spacing: 6) {
                             Circle()
                                 .fill(store.isConnected ? Color.green : Color.red)
                                 .frame(width: 8, height: 8)
-                            Text(store.isConnected ? "Connected" : "Disconnected")
+                            Text(store.isConnected ? "Online" : "Disconnected")
                                 .foregroundStyle(.secondary)
                         }
                     }
@@ -65,6 +66,22 @@ struct SettingsView: View {
                     }
                 }
 
+                // Sync service
+                Section("Sync Service") {
+                    TextField("Sync URL (e.g. http://192.168.1.116:8080)", text: $syncURL)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                        .keyboardType(.URL)
+                        .onSubmit { saveSyncURL() }
+
+                    Button(store.isConnected ? "Reconnect" : "Connect") {
+                        saveSyncURL()
+                        store.disconnect()
+                        store.connect()
+                    }
+                    .disabled(syncURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+
                 // Actions
                 Section {
                     Button("Sign Out", role: .destructive) {
@@ -80,5 +97,10 @@ struct SettingsView: View {
         store.disconnect()
         AppConfig.logout()
         isLoggedIn = false
+    }
+
+    private func saveSyncURL() {
+        let trimmed = syncURL.trimmingCharacters(in: .whitespacesAndNewlines)
+        AppConfig.syncServiceURL = trimmed.isEmpty ? nil : trimmed
     }
 }

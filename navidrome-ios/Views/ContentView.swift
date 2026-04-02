@@ -29,9 +29,7 @@ struct ContentView: View {
                     .padding(.bottom, 49) // tab bar height
             }
         }
-        .onAppear {
-            store.connect()
-        }
+
     }
 }
 
@@ -61,20 +59,22 @@ struct NowPlayingBar: View {
 
                 Spacer()
 
-                // Role badge
-                Text(store.myRole == "active" ? "Active" : "Observing")
-                    .font(.caption2)
-                    .fontWeight(.medium)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
-                    .background(store.myRole == "active" ? Color.green.opacity(0.2) : Color.secondary.opacity(0.2))
-                    .foregroundStyle(store.myRole == "active" ? .green : .secondary)
-                    .clipShape(Capsule())
+                if store.isConnected {
+                    // Role badge (only shown when sync service is connected)
+                    Text(store.myRole == "active" ? "Active" : "Observing")
+                        .font(.caption2)
+                        .fontWeight(.medium)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(store.myRole == "active" ? Color.green.opacity(0.2) : Color.secondary.opacity(0.2))
+                        .foregroundStyle(store.myRole == "active" ? .green : .secondary)
+                        .clipShape(Capsule())
 
-                // Connection dot
-                Circle()
-                    .fill(store.isConnected ? Color.green : Color.red)
-                    .frame(width: 8, height: 8)
+                    // Connection dot
+                    Circle()
+                        .fill(Color.green)
+                        .frame(width: 8, height: 8)
+                }
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 8)
