@@ -1,4 +1,5 @@
 .env
+.DS_Store
 navidrome-sync
 web/node_modules/
 web/dist/
