@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>navidrome-sync test</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, monospace; background: #111; color: #eee; padding: 1.5rem; }
+    h1 { font-size: 1.2rem; margin-bottom: 1rem; }
+    #status { display: inline-block; padding: 0.25rem 0.75rem; border-radius: 4px; font-size: 0.85rem; font-weight: 600; margin-bottom: 1rem; }
+    #status.connected { background: #1a7f37; color: #fff; }
+    #status.disconnected { background: #a11; color: #fff; }
+    .controls { display: flex; gap: 0.5rem; margin-bottom: 1rem; }
+    button { padding: 0.5rem 1rem; border: 1px solid #555; border-radius: 4px; background: #222; color: #eee; cursor: pointer; font-size: 0.9rem; }
+    button:hover { background: #333; }
+    button:disabled { opacity: 0.4; cursor: default; }
+    #log { background: #0a0a0a; border: 1px solid #333; border-radius: 4px; padding: 1rem; max-height: 70vh; overflow-y: auto; white-space: pre-wrap; word-break: break-all; font-size: 0.8rem; line-height: 1.5; }
+  </style>
+</head>
+<body>
+  <h1>navidrome-sync &mdash; test client</h1>
+  <div id="status" class="disconnected">disconnected</div>
+  <div class="controls">
+    <button id="btnClaim">CLAIM</button>
+    <button id="btnPlay">PLAY</button>
+    <button id="btnPause">PAUSE</button>
+    <button id="btnNext">NEXT</button>
+  </div>
+  <pre id="log"></pre>
+
+  <script>
+    const CLIENT_ID = 'test-web-client';
+    const logEl = document.getElementById('log');
+    const statusEl = document.getElementById('status');
+    const buttons = document.querySelectorAll('.controls button');
+    let ws;
+
+    function setStatus(connected) {
+      statusEl.textContent = connected ? 'connected' : 'disconnected';
+      statusEl.className = connected ? 'connected' : 'disconnected';
+      buttons.forEach(b => b.disabled = !connected);
+    }
+
+    function appendLog(label, obj) {
+      const ts = new Date().toLocaleTimeString();
+      const json = JSON.stringify(obj, null, 2);
+      logEl.textContent += `[${ts}] ${label}\n${json}\n\n`;
+      logEl.scrollTop = logEl.scrollHeight;
+    }
+
+    function sendMsg(type, payload) {
+      if (!ws || ws.readyState !== WebSocket.OPEN) return;
+      const msg = { type, clientId: CLIENT_ID, payload: payload || {} };
+      ws.send(JSON.stringify(msg));
+      appendLog('>>> SENT', msg);
+    }
+
+    function connect() {
+      const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+      ws = new WebSocket(`${proto}//${location.host}/ws`);
+
+      ws.addEventListener('open', () => {
+        setStatus(true);
+        appendLog('--- CONNECTED', {});
+        sendMsg('REGISTER', { clientType: 'web', clientId: CLIENT_ID });
+      });
+
+      ws.addEventListener('message', (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          appendLog('<<< RECV', data);
+        } catch {
+          appendLog('<<< RECV (raw)', event.data);
+        }
+      });
+
+      ws.addEventListener('close', () => {
+        setStatus(false);
+        appendLog('--- DISCONNECTED', {});
+        setTimeout(connect, 2000);
+      });
+
+      ws.addEventListener('error', () => {
+        ws.close();
+      });
+    }
+
+    document.getElementById('btnClaim').addEventListener('click', () => sendMsg('CLAIM'));
+    document.getElementById('btnPlay').addEventListener('click',  () => sendMsg('PLAY'));
+    document.getElementById('btnPause').addEventListener('click', () => sendMsg('PAUSE'));
+    document.getElementById('btnNext').addEventListener('click',  () => sendMsg('NEXT'));
+
+    setStatus(false);
+    connect();
+  </script>
+</body>
+</html>
