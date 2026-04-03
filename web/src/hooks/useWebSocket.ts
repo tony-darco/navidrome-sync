@@ -5,18 +5,21 @@ const RECONNECT_DELAY = 2000;
 
 export function useWebSocket() {
   const wsRef = useRef<WebSocket | null>(null);
-  const reconnectTimer = useRef<ReturnType<typeof setTimeout>>();
+  const reconnectTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const myClientId = useSyncStore((s) => s.myClientId);
   const setConnected = useSyncStore((s) => s.setConnected);
   const setSendMessage = useSyncStore((s) => s.setSendMessage);
   const handleStateSync = useSyncStore((s) => s.handleStateSync);
   const handleRoleChange = useSyncStore((s) => s.handleRoleChange);
+  const handleCommand = useSyncStore((s) => s.handleCommand);
   const handleError = useSyncStore((s) => s.handleError);
 
   useEffect(() => {
+    let isActive = true;
+
     function connect() {
       const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-      const ws = new WebSocket(`${proto}//${window.location.host}/ws`);
+      const ws = new WebSocket(`${proto}//${window.location.host}/ws?clientId=${myClientId}`);
       wsRef.current = ws;
 
       ws.addEventListener('open', () => {
@@ -37,11 +40,8 @@ export function useWebSocket() {
             case 'STATE_SYNC':
               handleStateSync(envelope.payload);
               break;
-            case 'ROLE_CHANGE':
-              handleRoleChange(envelope.payload);
-              break;
             case 'COMMAND':
-              // Active client receives its own commands echoed — handled by NowPlaying page
+              handleCommand(envelope.payload);
               break;
             case 'ERROR':
               handleError(envelope.payload);
@@ -53,6 +53,7 @@ export function useWebSocket() {
       });
 
       ws.addEventListener('close', () => {
+        if (!isActive) return;
         setConnected(false);
         wsRef.current = null;
         reconnectTimer.current = setTimeout(connect, RECONNECT_DELAY);
@@ -74,9 +75,10 @@ export function useWebSocket() {
     connect();
 
     return () => {
+      isActive = false;
       clearTimeout(reconnectTimer.current);
       wsRef.current?.close();
       wsRef.current = null;
     };
-  }, [myClientId, setConnected, setSendMessage, handleStateSync, handleRoleChange, handleError]);
+  }, [myClientId, setConnected, setSendMessage, handleStateSync, handleRoleChange, handleCommand, handleError]);
 }

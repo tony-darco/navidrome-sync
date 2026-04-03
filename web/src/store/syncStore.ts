@@ -20,6 +20,8 @@ export interface ConnectedClient {
 // Persistent audio element — lives for the lifetime of the app.
 const audio = new Audio();
 
+export type RepeatMode = 'off' | 'all' | 'one';
+
 interface SyncState {
   nowPlaying: NowPlayingSong | null;
   myClientId: string;
@@ -37,6 +39,10 @@ interface SyncState {
   queue: NowPlayingSong[];
   queueIndex: number;
 
+  // Shuffle & Repeat
+  shuffle: boolean;
+  repeatMode: RepeatMode;
+
   // WebSocket send function, set by useWebSocket
   sendMessage: ((type: string, payload?: Record<string, unknown>) => void) | null;
   setSendMessage: (fn: (type: string, payload?: Record<string, unknown>) => void) => void;
@@ -47,27 +53,42 @@ interface SyncState {
     activeClientId: string | null;
     song: NowPlayingSong | null;
     clients: ConnectedClient[];
+    queue?: NowPlayingSong[];
+    queueIndex?: number;
+    shuffle?: boolean;
+    repeatMode?: RepeatMode;
   }) => void;
   handleRoleChange: (payload: { clientId: string; role: 'active' | 'observer' }) => void;
+  handleCommand: (payload: { action: string; positionSecs?: number; song?: NowPlayingSong; queue?: NowPlayingSong[]; startIndex?: number; queueIndex?: number }) => void;
   handleError: (payload: { code: string; message: string }) => void;
 
   /** Get the underlying HTMLAudioElement (for direct binding in AudioManager). */
   getAudio: () => HTMLAudioElement;
 
   /** Load a song into the persistent audio and start playback. */
-  playSong: (song: NowPlayingSong) => void;
+  playSong: (song: NowPlayingSong, isCommand?: boolean) => void;
   /** Set the queue and start playing a specific index. */
-  playQueue: (queue: NowPlayingSong[], startIndex: number) => void;
+  playQueue: (queue: NowPlayingSong[], startIndex: number, isCommand?: boolean) => void;
   play: () => void;
   pause: () => void;
   seek: (positionSecs: number) => void;
-  next: () => void;
-  prev: () => void;
+  next: (isCommand?: boolean) => void;
+  prev: (isCommand?: boolean) => void;
+
+  toggleShuffle: () => void;
+  cycleRepeatMode: () => void;
+  removeFromQueue: (index: number) => void;
+  playQueueIndex: (index: number, isCommand?: boolean) => void;
+  clearQueue: () => void;
+  showQueue: boolean;
+  setShowQueue: (show: boolean) => void;
 
   claim: () => void;
-  sendCommand: (type: 'PLAY' | 'PAUSE' | 'NEXT' | 'PREV' | 'SEEK', payload?: Record<string, unknown>) => void;
+  sendCommand: (type: 'PLAY' | 'PAUSE' | 'NEXT' | 'PREV' | 'SEEK' | 'PLAY_SONG' | 'LOAD_QUEUE' | 'PLAY_INDEX', payload?: Record<string, unknown>) => void;
   sendNowPlaying: (song: NowPlayingSong) => void;
   sendPositionUpdate: (positionSecs: number) => void;
+  sendQueue: (queue: NowPlayingSong[], queueIndex: number) => void;
+  sendPlaybackOptions: () => void;
 }
 
 export const useSyncStore = create<SyncState>((set, get) => ({
@@ -82,6 +103,9 @@ export const useSyncStore = create<SyncState>((set, get) => ({
   position: 0,
   queue: [],
   queueIndex: 0,
+  shuffle: false,
+  repeatMode: 'off' as RepeatMode,
+  showQueue: false,
   sendMessage: null,
 
   setSendMessage: (fn) => set({ sendMessage: fn }),
@@ -91,15 +115,52 @@ export const useSyncStore = create<SyncState>((set, get) => ({
   setMyClientId: (id) => set({ myClientId: id }),
 
   handleStateSync: (payload) => {
-    const { myClientId } = get();
+    const { myClientId, myRole: previousRole } = get();
     const myClient = payload.clients.find((c) => c.clientId === myClientId);
-    set({
-      nowPlaying: payload.song,
+    const newRole = myClient?.role ?? 'observer';
+    const justBecameActive = previousRole !== 'active' && newRole === 'active';
+    
+    const updates: Partial<SyncState> = {
       activeClientId: payload.activeClientId,
       connectedClients: payload.clients,
-      myRole: myClient?.role ?? 'observer',
+      myRole: newRole,
       lastSyncTime: Date.now(),
-    });
+    };
+    
+    // Accept queue and state from server if we're an observer (or just became active via claim)
+    if (newRole === 'observer' || justBecameActive) {
+      updates.nowPlaying = payload.song;
+      if (payload.queue) {
+        updates.queue = payload.queue.map((q) => ({ ...q, positionSecs: 0 }));
+        updates.queueIndex = payload.queueIndex ?? 0;
+      }
+      if (payload.shuffle != null) {
+        updates.shuffle = payload.shuffle;
+      }
+      if (payload.repeatMode != null) {
+        updates.repeatMode = payload.repeatMode;
+      }
+    }
+    
+    set(updates);
+
+    // Auto-play when we just became active and there's a song.
+    // If audio is already playing the same song (started in claim()), just
+    // sync the position from the server's authoritative value and skip reload.
+    if (justBecameActive && payload.song) {
+      const song = payload.song;
+      if (!audio.paused && audio.src.includes(song.songId)) {
+        if (Math.abs(audio.currentTime - song.positionSecs) > 2) {
+          audio.currentTime = song.positionSecs;
+        }
+      } else {
+        audio.src = streamUrl(song.songId);
+        if (song.positionSecs > 0) {
+          audio.currentTime = song.positionSecs;
+        }
+        audio.play().catch(() => {});
+      }
+    }
   },
 
   handleRoleChange: (payload) => {
@@ -109,89 +170,256 @@ export const useSyncStore = create<SyncState>((set, get) => ({
     }
   },
 
+  handleCommand: (payload) => {
+    const store = get();
+    switch (payload.action) {
+      case 'STOP':
+        audio.pause();
+        audio.src = '';
+        break;
+      case 'PLAY':
+        audio.play().catch(() => {});
+        break;
+      case 'PAUSE':
+        audio.pause();
+        break;
+      case 'SEEK':
+        if (payload.positionSecs != null) {
+          audio.currentTime = payload.positionSecs;
+        }
+        break;
+      case 'NEXT':
+        store.next(true); // pass true to indicate it's an incoming command execution
+        break;
+      case 'PREV':
+        store.prev(true);
+        break;
+      case 'PLAY_SONG':
+        if (payload.song) {
+          store.playSong(payload.song, true);
+        }
+        break;
+      case 'LOAD_QUEUE':
+        if (payload.queue && payload.startIndex !== undefined) {
+          store.playQueue(payload.queue, payload.startIndex, true);
+        }
+        break;
+      case 'PLAY_INDEX':
+        if (payload.queueIndex !== undefined) {
+          store.playQueueIndex(payload.queueIndex, true);
+        }
+        break;
+    }
+  },
+
   handleError: (payload) => {
     console.error(`[sync] ${payload.code}: ${payload.message}`);
   },
 
   getAudio: () => audio,
 
-  playSong: (song) => {
-    const { myRole, sendNowPlaying } = get();
-    if (myRole !== 'active') {
-      get().sendMessage?.('CLAIM');
+  playSong: (song, isCommand = false) => {
+    const { myRole, sendNowPlaying, sendQueue } = get();
+    if (myRole !== 'active' && !isCommand) {
+      get().sendCommand('PLAY_SONG', { song });
+      return;
     }
-    set({ queue: [song], queueIndex: 0 });
+    set({ queue: [song], queueIndex: 0, nowPlaying: song });
     audio.src = streamUrl(song.songId);
     audio.play().catch(() => {});
+    if (song.positionSecs > 0) {
+      audio.currentTime = song.positionSecs;
+    }
+    sendQueue([song], 0);
     sendNowPlaying(song);
   },
 
-  playQueue: (queue, startIndex) => {
+  playQueue: (queue, startIndex, isCommand = false) => {
     const song = queue[startIndex];
     if (!song) return;
-    const { myRole, sendNowPlaying } = get();
-    if (myRole !== 'active') {
-      get().sendMessage?.('CLAIM');
+    const { myRole, sendNowPlaying, sendQueue } = get();
+    if (myRole !== 'active' && !isCommand) {
+      get().sendCommand('LOAD_QUEUE', { queue, startIndex });
+      return;
     }
-    set({ queue, queueIndex: startIndex });
+    set({ queue, queueIndex: startIndex, nowPlaying: song });
     audio.src = streamUrl(song.songId);
     audio.play().catch(() => {});
+    sendQueue(queue, startIndex);
     sendNowPlaying(song);
   },
 
   play: () => {
+    if (get().myRole !== 'active') {
+      get().sendCommand('PLAY');
+      return;
+    }
     audio.play().catch(() => {});
     get().sendCommand('PLAY');
   },
 
   pause: () => {
+    if (get().myRole !== 'active') {
+      get().sendCommand('PAUSE');
+      return;
+    }
     audio.pause();
     get().sendCommand('PAUSE');
   },
 
   seek: (positionSecs) => {
+    if (get().myRole !== 'active') {
+      get().sendCommand('SEEK', { positionSecs });
+      return;
+    }
     audio.currentTime = positionSecs;
     get().sendCommand('SEEK', { positionSecs });
   },
 
-  next: () => {
-    const { queue, queueIndex, sendNowPlaying, myRole } = get();
-    const nextIndex = queueIndex + 1;
-    if (nextIndex >= queue.length) return;
-    const song = queue[nextIndex];
-    if (myRole !== 'active') {
-      get().sendMessage?.('CLAIM');
+  next: (isCommand = false) => {
+    const { queue, queueIndex, sendNowPlaying, sendQueue, myRole, shuffle, repeatMode } = get();
+    if (myRole !== 'active' && !isCommand) {
+      get().sendCommand('NEXT');
+      return;
     }
-    set({ queueIndex: nextIndex });
+    if (queue.length === 0) return;
+
+    // Repeat-one: replay the current track
+    if (repeatMode === 'one') {
+      audio.currentTime = 0;
+      audio.play().catch(() => {});
+      return;
+    }
+
+    let nextIndex: number;
+    if (shuffle) {
+      // Pick a random index different from current (if possible)
+      if (queue.length === 1) {
+        nextIndex = 0;
+      } else {
+        do {
+          nextIndex = Math.floor(Math.random() * queue.length);
+        } while (nextIndex === queueIndex);
+      }
+    } else {
+      nextIndex = queueIndex + 1;
+      if (nextIndex >= queue.length) {
+        if (repeatMode === 'all') {
+          nextIndex = 0;
+        } else {
+          return; // end of queue, no repeat
+        }
+      }
+    }
+
+    const song = queue[nextIndex];
+    set({ queueIndex: nextIndex, nowPlaying: song });
     audio.src = streamUrl(song.songId);
     audio.play().catch(() => {});
     sendNowPlaying(song);
+    sendQueue(queue, nextIndex);
   },
 
-  prev: () => {
-    const { queue, queueIndex, sendNowPlaying, myRole } = get();
+  prev: (isCommand = false) => {
+    const { queue, queueIndex, sendNowPlaying, sendQueue, myRole, repeatMode } = get();
+    if (myRole !== 'active' && !isCommand) {
+      get().sendCommand('PREV');
+      return;
+    }
     // If more than 3s into the song, restart it; otherwise go to previous
     if (audio.currentTime > 3) {
       audio.currentTime = 0;
       return;
     }
-    const prevIndex = queueIndex - 1;
+    let prevIndex = queueIndex - 1;
     if (prevIndex < 0) {
-      audio.currentTime = 0;
-      return;
+      if (repeatMode === 'all') {
+        prevIndex = queue.length - 1;
+      } else {
+        audio.currentTime = 0;
+        return;
+      }
     }
     const song = queue[prevIndex];
-    if (myRole !== 'active') {
-      get().sendMessage?.('CLAIM');
-    }
-    set({ queueIndex: prevIndex });
+    set({ queueIndex: prevIndex, nowPlaying: song });
     audio.src = streamUrl(song.songId);
     audio.play().catch(() => {});
     sendNowPlaying(song);
+    sendQueue(queue, prevIndex);
   },
+
+  toggleShuffle: () => {
+    set((s) => ({ shuffle: !s.shuffle }));
+    // Defer so the state is updated before we read it
+    setTimeout(() => get().sendPlaybackOptions(), 0);
+  },
+
+  cycleRepeatMode: () => {
+    set((s) => {
+      const modes: RepeatMode[] = ['off', 'all', 'one'];
+      const idx = modes.indexOf(s.repeatMode);
+      return { repeatMode: modes[(idx + 1) % modes.length] };
+    });
+    setTimeout(() => get().sendPlaybackOptions(), 0);
+  },
+
+  removeFromQueue: (index: number) => {
+    const { queue, queueIndex, sendQueue } = get();
+    if (index < 0 || index >= queue.length) return;
+    const newQueue = [...queue];
+    newQueue.splice(index, 1);
+    let newIndex = queueIndex;
+    if (index < queueIndex) {
+      newIndex = queueIndex - 1;
+    } else if (index === queueIndex && newIndex >= newQueue.length) {
+      newIndex = Math.max(0, newQueue.length - 1);
+    }
+    set({ queue: newQueue, queueIndex: newIndex });
+    sendQueue(newQueue, newIndex);
+  },
+
+  playQueueIndex: (index: number, isCommand = false) => {
+    const { queue, sendNowPlaying, sendQueue, myRole } = get();
+    if (index < 0 || index >= queue.length) return;
+    const song = queue[index];
+    if (myRole !== 'active' && !isCommand) {
+      get().sendCommand('PLAY_INDEX', { queueIndex: index });
+      return;
+    }
+    set({ queueIndex: index, nowPlaying: song });
+    audio.src = streamUrl(song.songId);
+    audio.play().catch(() => {});
+    sendNowPlaying(song);
+    sendQueue(queue, index);
+  },
+
+  clearQueue: () => {
+    const { queueIndex, queue, sendQueue } = get();
+    // Keep only the currently playing song
+    const current = queue[queueIndex];
+    if (current) {
+      set({ queue: [current], queueIndex: 0 });
+      sendQueue([current], 0);
+    } else {
+      set({ queue: [], queueIndex: 0 });
+      sendQueue([], 0);
+    }
+  },
+
+  setShowQueue: (show: boolean) => set({ showQueue: show }),
 
   claim: () => {
     get().sendMessage?.('CLAIM');
+    // Start audio immediately inside the user gesture context so the browser
+    // autoplay policy doesn't block the subsequent WebSocket-callback play().
+    const { nowPlaying } = get();
+    if (nowPlaying) {
+      audio.src = streamUrl(nowPlaying.songId);
+      if (nowPlaying.positionSecs > 0) {
+        audio.currentTime = nowPlaying.positionSecs;
+      }
+      audio.play().catch(() => {});
+    }
   },
 
   sendCommand: (type, payload) => {
@@ -204,6 +432,23 @@ export const useSyncStore = create<SyncState>((set, get) => ({
 
   sendPositionUpdate: (positionSecs) => {
     get().sendMessage?.('POSITION_UPDATE', { positionSecs });
+  },
+
+  sendQueue: (queue, queueIndex) => {
+    const items = queue.map((s) => ({
+      songId: s.songId,
+      title: s.title,
+      artist: s.artist,
+      album: s.album,
+      coverArtId: s.coverArtId,
+      durationSecs: s.durationSecs,
+    }));
+    get().sendMessage?.('SET_QUEUE', { queue: items, queueIndex } as unknown as Record<string, unknown>);
+  },
+
+  sendPlaybackOptions: () => {
+    const { shuffle, repeatMode } = get();
+    get().sendMessage?.('SET_PLAYBACK_OPTIONS', { shuffle, repeatMode });
   },
 }));
 
