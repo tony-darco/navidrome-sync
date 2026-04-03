@@ -8,15 +8,14 @@ import AlbumDetail from '../components/AlbumDetail';
 import type { Album } from '../api/navidrome';  
 
 export default function Library() {
-  const { albums, loading, error, reload } = useAlbums();
+  const { albums, loading, error } = useAlbums();
   const [selectedAlbumId, setSelectedAlbumId] = useState<string | null>(null);
   const { album: albumDetail, songs, loading: detailLoading } = useAlbumDetail(selectedAlbumId);
   const { results: searchResults, loading: searchLoading, doSearch } = useSearch();
   const [query, setQuery] = useState('');
   const [isSearching, setIsSearching] = useState(false);
-  const debounceRef = useRef<ReturnType<typeof setTimeout>>();
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
-  const myRole = useSyncStore((s) => s.myRole);
   const playQueue = useSyncStore((s) => s.playQueue);
 
   // Initialize the navidrome API config on mount

@@ -6,20 +6,6 @@ export function useAlbums() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const load = useCallback(async (type = 'newest', size = 50, offset = 0) => {
-    setLoading(true);
-    setError(null);
-    try {
-      const result = await api.getAlbums(type, size, offset);
-      setAlbums(offset > 0 ? (prev) => [...prev, ...result] : result);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to load albums');
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  // Fix: setAlbums with updater needs to be called differently
   const loadMore = useCallback(async (type = 'newest', size = 50, offset = 0) => {
     setLoading(true);
     setError(null);
