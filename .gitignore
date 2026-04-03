@@ -3,3 +3,5 @@
 navidrome-sync
 web/node_modules/
 web/dist/
+*log*
+*out*
