@@ -21,6 +21,11 @@ final class SyncStore: ObservableObject {
 
     @Published var queue: [NowPlayingSong] = []
     @Published var queueIndex: Int = 0
+    @Published var isShuffled: Bool = false
+    @Published var repeatMode: RepeatMode = .off
+
+    /// Stores the original (unshuffled) queue order.
+    private var originalQueue: [NowPlayingSong] = []
 
     // MARK: - Private
 
@@ -54,7 +59,7 @@ final class SyncStore: ObservableObject {
             .store(in: &cancellables)
 
         audioPlayer.onTrackEnd = { [weak self] in
-            Task { @MainActor in self?.next() }
+            Task { @MainActor in self?.handleTrackEnd() }
         }
 
         // Wire remote command center to store actions
@@ -98,69 +103,115 @@ final class SyncStore: ObservableObject {
 
     // MARK: - Playback
 
-    func playSong(_ song: NowPlayingSong) {
-        if myRole != "active" {
+    func playSong(_ song: NowPlayingSong, isCommand: Bool = false) {
+        if myRole != "active" && !isCommand {
             if isConnected {
-                sendMessage(type: .claim)
+                let payload = PlaySongPayload(song: song)
+                sendMessage(type: .playSong, payload: payload)
             } else {
                 becomeActiveLocally()
+                queue = [song]
+                queueIndex = 0
+                loadAndPlay(song)
             }
+            return
         }
         queue = [song]
         queueIndex = 0
         loadAndPlay(song)
-        if isConnected { sendNowPlaying(song) }
+        if isConnected {
+            sendNowPlaying(song)
+            sendQueueToHub()
+        }
     }
 
-    func playQueue(_ songs: [NowPlayingSong], startIndex: Int) {
+    func playQueue(_ songs: [NowPlayingSong], startIndex: Int, isCommand: Bool = false) {
         guard startIndex < songs.count else { return }
-        if myRole != "active" {
+        if myRole != "active" && !isCommand {
             if isConnected {
-                sendMessage(type: .claim)
+                let payload = LoadQueuePayload(queue: songs, startIndex: startIndex)
+                sendMessage(type: .loadQueue, payload: payload)
             } else {
                 becomeActiveLocally()
+                queue = songs
+                queueIndex = startIndex
+                loadAndPlay(songs[startIndex])
             }
+            return
         }
         queue = songs
         queueIndex = startIndex
         let song = songs[startIndex]
         loadAndPlay(song)
-        if isConnected { sendNowPlaying(song) }
+        if isConnected {
+            sendNowPlaying(song)
+            sendQueueToHub()
+        }
     }
 
     func play() {
+        if myRole != "active" {
+            if isConnected { sendMessage(type: .play) }
+            return
+        }
         audioPlayer.resume()
         if isConnected { sendMessage(type: .play) }
     }
 
     func pause() {
+        if myRole != "active" {
+            if isConnected { sendMessage(type: .pause) }
+            return
+        }
         audioPlayer.pause()
         if isConnected { sendMessage(type: .pause) }
     }
 
     func seek(to positionSecs: Double) {
+        if myRole != "active" {
+            if isConnected { sendMessage(type: .seek, payload: SeekPayload(positionSecs: positionSecs)) }
+            return
+        }
         audioPlayer.seek(to: positionSecs)
         position = positionSecs
         if isConnected { sendMessage(type: .seek, payload: SeekPayload(positionSecs: positionSecs)) }
     }
 
-    func next() {
+    func next(isCommand: Bool = false) {
+        if myRole != "active" && !isCommand {
+            if isConnected { sendMessage(type: .next) }
+            return
+        }
+        
         let nextIndex = queueIndex + 1
-        guard nextIndex < queue.count else { return }
+        guard nextIndex < queue.count else {
+            // If repeat all, wrap around to first track
+            if repeatMode == .all && !queue.isEmpty {
+                queueIndex = 0
+                let song = queue[0]
+                loadAndPlay(song)
+                if isConnected {
+                    sendNowPlaying(song)
+                    sendQueueToHub()
+                }
+            }
+            return
+        }
         queueIndex = nextIndex
         let song = queue[nextIndex]
-        if myRole != "active" {
-            if isConnected {
-                sendMessage(type: .claim)
-            } else {
-                becomeActiveLocally()
-            }
-        }
         loadAndPlay(song)
-        if isConnected { sendNowPlaying(song) }
+        if isConnected {
+            sendNowPlaying(song)
+            sendQueueToHub()
+        }
     }
 
-    func prev() {
+    func prev(isCommand: Bool = false) {
+        if myRole != "active" && !isCommand {
+            if isConnected { sendMessage(type: .prev) }
+            return
+        }
+        
         // If more than 3s in, restart current track
         if audioPlayer.currentTime > 3 {
             audioPlayer.seek(to: 0)
@@ -173,15 +224,11 @@ final class SyncStore: ObservableObject {
         }
         queueIndex = prevIndex
         let song = queue[prevIndex]
-        if myRole != "active" {
-            if isConnected {
-                sendMessage(type: .claim)
-            } else {
-                becomeActiveLocally()
-            }
-        }
         loadAndPlay(song)
-        if isConnected { sendNowPlaying(song) }
+        if isConnected {
+            sendNowPlaying(song)
+            sendQueueToHub()
+        }
     }
 
     func claim() {
@@ -189,6 +236,66 @@ final class SyncStore: ObservableObject {
             sendMessage(type: .claim)
         } else {
             becomeActiveLocally()
+        }
+    }
+
+    func toggleShuffle() {
+        isShuffled.toggle()
+        if isShuffled {
+            originalQueue = queue
+            // Shuffle everything after the current index
+            let currentSong = queue[queueIndex]
+            var remaining = queue
+            remaining.remove(at: queueIndex)
+            remaining.shuffle()
+            queue = [currentSong] + remaining
+            queueIndex = 0
+        } else {
+            // Restore original order, keeping the current song's position
+            let currentSong = queue[queueIndex]
+            queue = originalQueue
+            queueIndex = queue.firstIndex(where: { $0.songId == currentSong.songId }) ?? 0
+            originalQueue = []
+        }
+        if isConnected {
+            sendQueueToHub()
+            sendPlaybackOptions()
+        }
+    }
+
+    func toggleRepeat() {
+        switch repeatMode {
+        case .off: repeatMode = .all
+        case .all: repeatMode = .one
+        case .one: repeatMode = .off
+        }
+        if isConnected { sendPlaybackOptions() }
+    }
+
+    func clearQueue() {
+        // Keep only the currently playing song
+        if queueIndex < queue.count {
+            let currentSong = queue[queueIndex]
+            queue = [currentSong]
+            queueIndex = 0
+        }
+        if isConnected { sendQueueToHub() }
+    }
+
+    /// Called when a track finishes playing.
+    private func handleTrackEnd() {
+        switch repeatMode {
+        case .one:
+            // Replay the same track
+            if let song = nowPlaying {
+                loadAndPlay(NowPlayingSong(
+                    songId: song.songId, title: song.title, artist: song.artist,
+                    album: song.album, coverArtId: song.coverArtId,
+                    durationSecs: song.durationSecs, positionSecs: 0
+                ))
+            }
+        case .all, .off:
+            next()
         }
     }
 
@@ -204,7 +311,7 @@ final class SyncStore: ObservableObject {
     private func loadAndPlay(_ song: NowPlayingSong) {
         nowPlaying = song
         guard let url = NavidromeClient.shared.streamURL(songId: song.songId) else { return }
-        audioPlayer.play(url: url)
+        audioPlayer.play(url: url, position: song.positionSecs)
         updateLockScreen(song: song)
     }
 
@@ -235,6 +342,30 @@ final class SyncStore: ObservableObject {
             positionSecs: song.positionSecs
         )
         sendMessage(type: .nowPlaying, payload: payload)
+    }
+
+    private func sendQueueToHub() {
+        let items = queue.map {
+            QueueItemPayload(
+                songId: $0.songId,
+                title: $0.title,
+                artist: $0.artist,
+                album: $0.album,
+                coverArtId: $0.coverArtId,
+                durationSecs: $0.durationSecs
+            )
+        }
+        sendMessage(type: .setQueue, payload: SetQueuePayload(queue: items, queueIndex: queueIndex))
+    }
+
+    private func sendPlaybackOptions() {
+        let modeString: String
+        switch repeatMode {
+        case .off: modeString = "off"
+        case .all: modeString = "all"
+        case .one: modeString = "one"
+        }
+        sendMessage(type: .setPlaybackOptions, payload: PlaybackOptionsPayload(shuffle: isShuffled, repeatMode: modeString))
     }
 
     // MARK: - Position reporting (active only, ~1s)
@@ -283,9 +414,6 @@ final class SyncStore: ObservableObject {
         case .stateSync:
             guard let payload = envelope.payload?.decode(StateSyncPayload.self) else { return }
             handleStateSync(payload)
-        case .roleChange:
-            guard let payload = envelope.payload?.decode(RoleChangePayload.self) else { return }
-            handleRoleChange(payload)
         case .command:
             guard let payload = envelope.payload?.decode(CommandPayload.self) else { return }
             handleCommand(payload)
@@ -299,6 +427,7 @@ final class SyncStore: ObservableObject {
     }
 
     private func handleStateSync(_ payload: StateSyncPayload) {
+        let previousRole = myRole
         activeClientId = payload.activeClientId
         connectedClients = payload.clients
         lastSyncTime = Date()
@@ -308,16 +437,49 @@ final class SyncStore: ObservableObject {
             myRole = me.role
         }
 
+        // Active clients own the state. We don't overwrite local state with echoes
+        // of our own messages, as it causes race conditions (e.g. going back and forth).
+        let justBecameActive = (previousRole != "active" && myRole == "active")
+        
+        if myRole == "observer" || justBecameActive {
+            // Accept queue from server
+            if let serverQueue = payload.queue {
+                queue = serverQueue.map { $0.toNowPlayingSong() }
+                queueIndex = payload.queueIndex ?? 0
+            }
+
+            // Accept shuffle & repeat from server
+            if let shuffle = payload.shuffle {
+                isShuffled = shuffle
+            }
+            if let rm = payload.repeatMode {
+                switch rm {
+                case "all": repeatMode = .all
+                case "one": repeatMode = .one
+                default: repeatMode = .off
+                }
+            }
+        }
+
         // Update now playing from server state
         if let song = payload.song {
-            nowPlaying = song
-            if myRole == "observer" {
-                position = song.positionSecs
-                startInterpolation()
+            if myRole == "observer" || justBecameActive {
+                nowPlaying = song
+                if myRole == "observer" {
+                    position = song.positionSecs
+                    startInterpolation()
+                }
+            }
+            
+            // Auto-play when we just became active and there's a song
+            if justBecameActive {
+                loadAndPlay(song)
             }
         } else {
-            nowPlaying = nil
-            stopInterpolation()
+            if myRole == "observer" || justBecameActive {
+                nowPlaying = nil
+                stopInterpolation()
+            }
         }
     }
 
@@ -334,9 +496,9 @@ final class SyncStore: ObservableObject {
     }
 
     private func handleCommand(_ payload: CommandPayload) {
-        // Commands are echoed back to the active client — we handle them
-        // so that external control (e.g., another client sending SEEK) works.
         switch payload.action {
+        case "STOP":
+            audioPlayer.stop()
         case "PLAY":
             audioPlayer.resume()
         case "PAUSE":
@@ -345,8 +507,36 @@ final class SyncStore: ObservableObject {
             if let pos = payload.positionSecs {
                 audioPlayer.seek(to: pos)
             }
+        case "NEXT":
+            next(isCommand: true)
+        case "PREV":
+            prev(isCommand: true)
+        case "PLAY_SONG":
+            if let songPayload = payload.song {
+                let song = NowPlayingSong(
+                    songId: songPayload.songId,
+                    title: songPayload.title,
+                    artist: songPayload.artist,
+                    album: songPayload.album,
+                    coverArtId: songPayload.coverArtId,
+                    durationSecs: songPayload.durationSecs,
+                    positionSecs: songPayload.positionSecs ?? 0.0
+                )
+                playSong(song, isCommand: true)
+            }
+        case "LOAD_QUEUE":
+            if let q = payload.queue, let startIndex = payload.startIndex {
+                let songs = q.map { $0.toNowPlayingSong() }
+                playQueue(songs, startIndex: startIndex, isCommand: true)
+            }
         default:
             break
         }
     }
+}
+
+// MARK: - Repeat mode
+
+enum RepeatMode {
+    case off, all, one
 }

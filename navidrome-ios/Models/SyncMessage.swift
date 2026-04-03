@@ -13,6 +13,10 @@ nonisolated enum MessageType: String, Codable, Sendable {
     case next = "NEXT"
     case prev = "PREV"
     case seek = "SEEK"
+    case playSong = "PLAY_SONG"
+    case loadQueue = "LOAD_QUEUE"
+    case setQueue = "SET_QUEUE"
+    case setPlaybackOptions = "SET_PLAYBACK_OPTIONS"
 
     // Outbound (server → client)
     case stateSync = "STATE_SYNC"
@@ -59,6 +63,10 @@ nonisolated struct StateSyncPayload: Codable, Sendable {
     let activeClientId: String?
     let song: NowPlayingSong?
     let clients: [ConnectedClient]
+    let queue: [QueueItemPayload]?
+    let queueIndex: Int?
+    let shuffle: Bool?
+    let repeatMode: String?
 }
 
 nonisolated struct RoleChangePayload: Codable, Sendable {
@@ -69,11 +77,57 @@ nonisolated struct RoleChangePayload: Codable, Sendable {
 nonisolated struct CommandPayload: Codable, Sendable {
     let action: String
     let positionSecs: Double?
+    let song: NowPlayingPayload?
+    let queue: [QueueItemPayload]?
+    let startIndex: Int?
+    let queueIndex: Int?
 }
+
+// Extra models for sending commands
+nonisolated struct PlaySongPayload: Codable, Sendable {
+    let song: NowPlayingSong
+}
+
+nonisolated struct LoadQueuePayload: Codable, Sendable {
+    let queue: [NowPlayingSong]
+    let startIndex: Int
+}
+
 
 nonisolated struct ErrorPayload: Codable, Sendable {
     let code: String
     let message: String
+}
+
+nonisolated struct QueueItemPayload: Codable, Sendable {
+    let songId: String
+    let title: String
+    let artist: String
+    let album: String
+    let coverArtId: String
+    let durationSecs: Int
+
+    func toNowPlayingSong() -> NowPlayingSong {
+        NowPlayingSong(
+            songId: songId,
+            title: title,
+            artist: artist,
+            album: album,
+            coverArtId: coverArtId,
+            durationSecs: durationSecs,
+            positionSecs: 0
+        )
+    }
+}
+
+nonisolated struct SetQueuePayload: Codable, Sendable {
+    let queue: [QueueItemPayload]
+    let queueIndex: Int
+}
+
+nonisolated struct PlaybackOptionsPayload: Codable, Sendable {
+    let shuffle: Bool
+    let repeatMode: String
 }
 
 // MARK: - Lightweight JSON wrapper

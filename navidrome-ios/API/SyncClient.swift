@@ -33,7 +33,7 @@ nonisolated final class SyncClient: @unchecked Sendable {
         // Build ws:// or wss:// URL from the HTTP base URL
         var urlString = baseURL.replacingOccurrences(of: "http://", with: "ws://")
             .replacingOccurrences(of: "https://", with: "wss://")
-        urlString += "/ws"
+        urlString += "/ws?clientId=\(clientId)"
 
         guard let url = URL(string: urlString) else { return }
 

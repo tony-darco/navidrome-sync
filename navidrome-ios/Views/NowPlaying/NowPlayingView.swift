@@ -2,6 +2,7 @@ import SwiftUI
 
 struct NowPlayingView: View {
     @EnvironmentObject private var store: SyncStore
+    @State private var showQueue = false
 
     var body: some View {
         NavigationStack {
@@ -12,8 +13,20 @@ struct NowPlayingView: View {
                     emptyState
                 }
             }
-            .navigationTitle("Now Playing")
             .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .principal) {
+                    HStack(spacing: 6) {
+                        Text("Now Playing")
+                            .font(.headline)
+                        if store.isConnected {
+                            Circle()
+                                .fill(.blue)
+                                .frame(width: 8, height: 8)
+                        }
+                    }
+                }
+            }
         }
     }
 
@@ -66,24 +79,22 @@ struct NowPlayingView: View {
                 observerProgressBar(song)
             }
 
-            // Controls or Play Here
-            if store.myRole == "active" {
-                transportControls
-            } else {
+            // Transport controls (both roles)
+            transportControls(for: song)
+            extraControls
+
+            // Play Here (when not active)
+            if store.isConnected && store.myRole != "active" {
                 PlayHereButton()
-            }
-
-            // Role badge (only when sync is active)
-            if store.isConnected {
-                roleBadge
-
-                // Connected clients
-                clientsList
             }
 
             Spacer()
         }
         .padding()
+        .sheet(isPresented: $showQueue) {
+            QueueSheet()
+                .environmentObject(store)
+        }
     }
 
     // MARK: - Active: seekable progress
@@ -146,16 +157,22 @@ struct NowPlayingView: View {
         .padding(.horizontal)
     }
 
-    // MARK: - Transport controls (active only)
+    // MARK: - Transport controls
 
-    private var transportControls: some View {
+    private func transportControls(for song: NowPlayingSong) -> some View {
         HStack(spacing: 40) {
             Button { store.prev() } label: {
                 Image(systemName: "backward.fill")
                     .font(.title)
             }
 
-            Button { store.isPlaying ? store.pause() : store.play() } label: {
+            Button {
+                if store.myRole == "active" {
+                    store.isPlaying ? store.pause() : store.play()
+                } else {
+                    store.playSong(song)
+                }
+            } label: {
                 Image(systemName: store.isPlaying ? "pause.circle.fill" : "play.circle.fill")
                     .font(.system(size: 56))
             }
@@ -168,36 +185,33 @@ struct NowPlayingView: View {
         .foregroundStyle(.primary)
     }
 
-    // MARK: - Role badge
+    // MARK: - Shuffle / Repeat / Queue
 
-    private var roleBadge: some View {
-        Text(store.myRole == "active" ? "Active Client" : "Observing")
-            .font(.caption)
-            .fontWeight(.medium)
-            .padding(.horizontal, 12)
-            .padding(.vertical, 6)
-            .background(store.myRole == "active" ? Color.green.opacity(0.2) : Color.secondary.opacity(0.2))
-            .foregroundStyle(store.myRole == "active" ? .green : .secondary)
-            .clipShape(Capsule())
-    }
+    private var extraControls: some View {
+        HStack(spacing: 36) {
+            Button { store.toggleShuffle() } label: {
+                Image(systemName: "shuffle")
+                    .font(.title3)
+                    .foregroundStyle(store.isShuffled ? .green : .secondary)
+            }
 
-    // MARK: - Clients list
+            Spacer()
 
-    private var clientsList: some View {
-        HStack(spacing: 8) {
-            ForEach(store.connectedClients) { client in
-                HStack(spacing: 4) {
-                    Image(systemName: client.clientType == "ios" ? "iphone" : "desktopcomputer")
-                        .font(.caption2)
-                    Text(client.role == "active" ? "Active" : "Observer")
-                        .font(.caption2)
-                }
-                .padding(.horizontal, 8)
-                .padding(.vertical, 4)
-                .background(Color(.systemGray6))
-                .clipShape(Capsule())
+            Button { store.toggleRepeat() } label: {
+                Image(systemName: store.repeatMode == .one ? "repeat.1" : "repeat")
+                    .font(.title3)
+                    .foregroundStyle(store.repeatMode != .off ? .green : .secondary)
+            }
+
+            Spacer()
+
+            Button { showQueue = true } label: {
+                Image(systemName: "list.bullet")
+                    .font(.title3)
+                    .foregroundStyle(.secondary)
             }
         }
+        .padding(.horizontal, 24)
     }
 
     // MARK: - Helpers
@@ -207,5 +221,83 @@ struct NowPlayingView: View {
         let m = total / 60
         let s = total % 60
         return String(format: "%d:%02d", m, s)
+    }
+}
+
+// MARK: - Queue Sheet
+
+struct QueueSheet: View {
+    @EnvironmentObject private var store: SyncStore
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            List {
+                // Now Playing
+                if store.queueIndex < store.queue.count {
+                    Section("Now Playing") {
+                        queueRow(store.queue[store.queueIndex], isActive: true)
+                    }
+                }
+
+                // Up Next
+                let upcoming = Array(store.queue.dropFirst(store.queueIndex + 1))
+                if !upcoming.isEmpty {
+                    Section {
+                        ForEach(Array(upcoming.enumerated()), id: \.element.songId) { offset, song in
+                            Button {
+                                store.playQueue(store.queue, startIndex: store.queueIndex + 1 + offset)
+                            } label: {
+                                queueRow(song, isActive: false)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    } header: {
+                        HStack {
+                            Text("Next From: \(store.nowPlaying?.album ?? "")")
+                            Spacer()
+                            if upcoming.count > 0 {
+                                Button("Clear queue") {
+                                    store.clearQueue()
+                                }
+                                .font(.subheadline)
+                            }
+                        }
+                    }
+                }
+            }
+            .listStyle(.plain)
+            .navigationTitle(store.nowPlaying?.album ?? "Queue")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button { dismiss() } label: {
+                        Image(systemName: "xmark")
+                    }
+                }
+            }
+        }
+    }
+
+    private func queueRow(_ song: NowPlayingSong, isActive: Bool) -> some View {
+        HStack(spacing: 12) {
+            CoverArtImage(id: song.coverArtId, size: 80)
+                .frame(width: 44, height: 44)
+                .clipShape(RoundedRectangle(cornerRadius: 6))
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(song.title)
+                    .font(.subheadline)
+                    .fontWeight(isActive ? .semibold : .regular)
+                    .foregroundStyle(isActive ? .green : .primary)
+                    .lineLimit(1)
+                Text(song.artist)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+
+            Spacer()
+        }
     }
 }

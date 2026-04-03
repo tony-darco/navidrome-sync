@@ -3,28 +3,35 @@ import SwiftUI
 struct ContentView: View {
     @EnvironmentObject private var store: SyncStore
     @Binding var isLoggedIn: Bool
+    @State private var selectedTab = 0
 
     var body: some View {
         ZStack(alignment: .bottom) {
-            TabView {
+            TabView(selection: $selectedTab) {
                 NowPlayingView()
+                    .tag(0)
                     .tabItem {
                         Label("Now Playing", systemImage: "music.note")
                     }
+                    .toolbarBackground(.visible, for: .tabBar)
 
                 LibraryView()
+                    .tag(1)
                     .tabItem {
                         Label("Library", systemImage: "books.vertical")
                     }
+                    .toolbarBackground(.visible, for: .tabBar)
 
                 SettingsView(isLoggedIn: $isLoggedIn)
+                    .tag(2)
                     .tabItem {
                         Label("Settings", systemImage: "gear")
                     }
+                    .toolbarBackground(.visible, for: .tabBar)
             }
 
-            // Persistent mini player bar above tab bar
-            if store.nowPlaying != nil {
+            // Persistent mini player bar above tab bar (hidden on Now Playing tab)
+            if store.nowPlaying != nil && selectedTab != 0 {
                 NowPlayingBar()
                     .padding(.bottom, 49) // tab bar height
             }

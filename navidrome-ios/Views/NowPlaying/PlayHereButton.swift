@@ -4,16 +4,17 @@ struct PlayHereButton: View {
     @EnvironmentObject private var store: SyncStore
 
     var body: some View {
-        if store.myRole != "active", let song = store.nowPlaying {
+        if store.myRole != "active" {
             Button {
-                store.playSong(song)
+                store.claim()
             } label: {
                 Label("Play Here", systemImage: "play.fill")
-                    .font(.headline)
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, 32)
-                    .padding(.vertical, 14)
-                    .background(Color.green)
+                    .font(.caption)
+                    .fontWeight(.medium)
+                    .foregroundStyle(.green)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 6)
+                    .background(Color.green.opacity(0.2))
                     .clipShape(Capsule())
             }
         }

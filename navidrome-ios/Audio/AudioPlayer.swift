@@ -9,6 +9,7 @@ nonisolated final class AudioPlayer: ObservableObject {
     private var timeObserver: Any?
     private var endObserver: NSObjectProtocol?
     private var statusObservation: NSKeyValueObservation?
+    private var itemStatusObservation: NSKeyValueObservation?
 
     @Published var currentTime: Double = 0
     @Published var isPlaying: Bool = false
@@ -34,6 +35,7 @@ nonisolated final class AudioPlayer: ObservableObject {
         if let timeObserver { player.removeTimeObserver(timeObserver) }
         if let endObserver { NotificationCenter.default.removeObserver(endObserver) }
         statusObservation?.invalidate()
+        itemStatusObservation?.invalidate()
     }
 
     // MARK: - Audio session
@@ -58,7 +60,9 @@ nonisolated final class AudioPlayer: ObservableObject {
             forName: .AVPlayerItemDidPlayToEndTime,
             object: nil,
             queue: .main
-        ) { [weak self] _ in
+        ) { [weak self] notification in
+            guard let item = notification.object as? AVPlayerItem,
+                  item == self?.player.currentItem else { return }
             self?.onTrackEnd?()
         }
     }
@@ -110,10 +114,19 @@ nonisolated final class AudioPlayer: ObservableObject {
 
     // MARK: - Playback controls
 
-    func play(url: URL) {
+    func play(url: URL, position: Double = 0) {
+        itemStatusObservation?.invalidate()
         let item = AVPlayerItem(url: url)
         player.replaceCurrentItem(with: item)
-        player.play()
+        
+        itemStatusObservation = item.observe(\.status, options: [.new]) { [weak self] observedItem, _ in
+            if observedItem.status == .readyToPlay {
+                if position > 0 {
+                    self?.seek(to: position)
+                }
+                self?.player.play()
+            }
+        }
     }
 
     func resume() {
