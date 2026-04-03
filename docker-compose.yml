@@ -1,0 +1,24 @@
+# This docker-compose file is intentionally separate from the Navidrome compose stack.
+# Ensure NAVIDROME_URL points to your Navidrome instance's LAN address.
+
+version: '3.8'
+
+services:
+  navidrome-sync:
+    build: .
+    container_name: navidrome-sync
+    restart: unless-stopped
+    ports:
+      - "8082:8080"
+    environment:
+      NAVIDROME_URL: "http://192.168.x.x:4533" # Base URL of the Navidrome instance (use http://navidrome:4533 if on the same Docker network)
+      NAVIDROME_USER: "your-username"         # Navidrome username
+      NAVIDROME_PASSWORD: "your-password"     # Navidrome password
+      POLL_INTERVAL_SECS: "3"                 # Polling interval in seconds (default: 3)
+      PORT: "8080"                            # Port to listen on (default: 8080)
+    networks:
+      - navidrome-net
+
+networks:
+  navidrome-net:
+    external: true

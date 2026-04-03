@@ -14,8 +14,8 @@ export default defineConfig({
             if ((err as NodeJS.ErrnoException).code === 'EPIPE') return;
             console.error('[ws proxy error]', err.message);
           };
-          proxy.on('error', suppressEpipe);
-          proxy.on('proxyReqWsError', suppressEpipe);
+          proxy.on('error', suppressEpipe as never);
+          proxy.on('proxyReqWsError', suppressEpipe as never);
           // Suppress socket-level EPIPE errors on the server socket
           proxy.on('open', (proxySocket) => {
             proxySocket.on('error', suppressEpipe);
@@ -28,7 +28,7 @@ export default defineConfig({
     },
   },
   build: {
-    outDir: '../static',
-    emptyOutDir: true,
-  },
+  outDir: 'dist',
+  emptyOutDir: true,
+ },
 })
