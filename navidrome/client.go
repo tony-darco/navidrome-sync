@@ -37,6 +37,10 @@ func NewClient(baseURL, user, password string) *Client {
 type subsonicResponse struct {
 	SubsonicResponse struct {
 		Status     string `json:"status"`
+		Error      struct {
+			Code    int    `json:"code"`
+			Message string `json:"message"`
+		} `json:"error"`
 		NowPlaying struct {
 			Entry []struct {
 				ID       string `json:"id"`
@@ -78,7 +82,10 @@ func (c *Client) GetNowPlaying() (*NowPlayingEntry, error) {
 	}
 
 	if sr.SubsonicResponse.Status != "ok" {
-		return nil, fmt.Errorf("subsonic API error: status=%s", sr.SubsonicResponse.Status)
+		return nil, fmt.Errorf("subsonic API error: status=%s code=%d message=%s",
+			sr.SubsonicResponse.Status,
+			sr.SubsonicResponse.Error.Code,
+			sr.SubsonicResponse.Error.Message)
 	}
 
 	entries := sr.SubsonicResponse.NowPlaying.Entry
