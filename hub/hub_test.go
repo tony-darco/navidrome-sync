@@ -140,7 +140,7 @@ func TestClaimTransfersActiveRole(t *testing.T) {
 	}
 }
 
-func TestOnlyActiveClientCommand(t *testing.T) {
+func TestCommandsForwardedToActiveClient(t *testing.T) {
 	h := NewHub()
 	go h.Run()
 
@@ -156,19 +156,19 @@ func TestOnlyActiveClientCommand(t *testing.T) {
 	readMessage(t, c2)
 
 	sendInboundMsg(h, c2, MsgPlay, nil)
-	msgErr := readMessage(t, c2)
-	if msgErr.Type != MsgError {
-		t.Errorf("expected ERROR, got %s", msgErr.Type)
+	msgCmdFromC2 := readMessage(t, c1) // C2 sent play, C1 (active) receives it
+	if msgCmdFromC2.Type != MsgCommand {
+		t.Errorf("expected COMMAND, got %s", msgCmdFromC2.Type)
 	}
 
 	sendInboundMsg(h, c1, MsgPlay, nil)
-	msgCmd := readMessage(t, c1)
-	if msgCmd.Type != MsgCommand {
-		t.Errorf("expected COMMAND, got %s", msgCmd.Type)
+	msgCmdFromC1 := readMessage(t, c1)
+	if msgCmdFromC1.Type != MsgCommand {
+		t.Errorf("expected COMMAND, got %s", msgCmdFromC1.Type)
 	}
 }
 
-func TestDisconnectActiveClientClearsState(t *testing.T) {
+func TestDisconnectActiveClientKeepsState(t *testing.T) {
 	h := NewHub()
 	go h.Run()
 
@@ -184,11 +184,8 @@ func TestDisconnectActiveClientClearsState(t *testing.T) {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 
-	if h.activeClientID != "" {
-		t.Errorf("expected no active client, got %s", h.activeClientID)
-	}
-	if h.state != nil {
-		t.Errorf("expected nowPlaying state to be nil, got %v", h.state)
+	if h.activeClientID != "client-1" {
+		t.Errorf("expected active client client-1, got %s", h.activeClientID)
 	}
 }
 
@@ -214,5 +211,119 @@ func TestNowPlayingUpdatesState(t *testing.T) {
 
 	if msg1.Type != MsgStateSync || msg2.Type != MsgStateSync {
 		t.Errorf("expected STATE_SYNC broadcast")
+	}
+}
+
+func TestObserverSendsPlaySongCommand(t *testing.T) {
+	h := NewHub()
+	go h.Run()
+
+	c1 := createFakeClient("client-1", "")
+	c2 := createFakeClient("client-2", "")
+
+	// Register active
+	h.register <- c1
+	readMessage(t, c1) // ROLE_CHANGE
+	readMessage(t, c1) // STATE_SYNC
+
+	// Register observer
+	h.register <- c2
+	readMessage(t, c2) // ROLE_CHANGE
+	readMessage(t, c2) // STATE_SYNC
+
+	// Observer sending PLAY_SONG with payload
+	payload := map[string]interface{}{
+		"songId": "test-song",
+		"index":  float64(5), // JSON maps numbers to float64
+	}
+	sendInboundMsg(h, c2, MsgPlaySong, payload)
+
+	// Active client (c1) should receive COMMAND with action=PLAY_SONG and the payload merged
+	msg := readMessage(t, c1)
+	if msg.Type != MsgCommand {
+		t.Fatalf("expected COMMAND to be sent to active client, got %s", msg.Type)
+	}
+
+	cmdPayload, _ := msg.Payload.(map[string]interface{})
+	if cmdPayload["action"] != MsgPlaySong {
+		t.Errorf("expected action=PLAY_SONG, got %v", cmdPayload["action"])
+	}
+	if cmdPayload["songId"] != "test-song" {
+		t.Errorf("expected payload songId='test-song', got %v", cmdPayload["songId"])
+	}
+	if cmdPayload["index"] != float64(5) {
+		t.Errorf("expected payload index=5, got %v", cmdPayload["index"])
+	}
+}
+
+func TestObserverSendsLoadQueueCommand(t *testing.T) {
+	h := NewHub()
+	go h.Run()
+
+	c1 := createFakeClient("client-1", "")
+	c2 := createFakeClient("client-2", "")
+
+	// Register active
+	h.register <- c1
+	readMessage(t, c1)
+	readMessage(t, c1)
+
+	// Register observer
+	h.register <- c2
+	readMessage(t, c2)
+	readMessage(t, c2)
+
+	queuePayload := map[string]interface{}{
+		"items": []interface{}{
+			map[string]interface{}{"songId": "song-A"},
+			map[string]interface{}{"songId": "song-B"},
+		},
+		"index": float64(0),
+	}
+	sendInboundMsg(h, c2, MsgLoadQueue, queuePayload)
+
+	msg := readMessage(t, c1)
+	if msg.Type != MsgCommand {
+		t.Fatalf("expected COMMAND to be sent to active client, got %s", msg.Type)
+	}
+
+	cmdPayload, _ := msg.Payload.(map[string]interface{})
+	if cmdPayload["action"] != MsgLoadQueue {
+		t.Errorf("expected action=LOAD_QUEUE, got %v", cmdPayload["action"])
+	}
+	if items, ok := cmdPayload["items"].([]interface{}); ok {
+		if len(items) != 2 {
+			t.Errorf("expected 2 items, got %d", len(items))
+		}
+	} else {
+		t.Errorf("missing or invalid items field in payload: %v", cmdPayload)
+	}
+}
+
+func TestTransportCommandWithNoActiveClient(t *testing.T) {
+	h := NewHub()
+	go h.Run()
+
+	c := createFakeClient("client-observer", "observer")
+	h.register <- c
+	readMessage(t, c)
+	readMessage(t, c)
+
+	// In test, since active client isn't fully mocked for c, we must manually unset h.activeClientID
+	// or just create a hub where no one is active. Since register assigns first as active, let's clear it.
+	h.mu.Lock()
+	h.activeClientID = ""
+	h.mu.Unlock()
+
+	sendInboundMsg(h, c, MsgPlay, nil)
+
+	msg := readMessage(t, c)
+	if msg.Type != MsgError {
+		t.Fatalf("expected ERROR message, got %s", msg.Type)
+	}
+
+	errPayload, _ := msg.Payload.(map[string]interface{})
+	if errPayload["code"] != "NO_ACTIVE_CLIENT" {
+		t.Errorf("expected NO_ACTIVE_CLIENT error, got %v", errPayload["code"])
 	}
 }

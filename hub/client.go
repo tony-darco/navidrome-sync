@@ -13,7 +13,7 @@ const (
 	writeWait  = 10 * time.Second
 	pongWait   = 60 * time.Second
 	pingPeriod = (pongWait * 9) / 10
-	maxMsgSize = 4096
+	maxMsgSize = 1048576 // 1MB to handle large playlists/queues
 )
 
 type Client struct {

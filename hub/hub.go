@@ -16,15 +16,19 @@ import (
 
 const (
 	// Inbound
-	MsgRegister       = "REGISTER"
-	MsgNowPlaying     = "NOW_PLAYING"
-	MsgPositionUpdate = "POSITION_UPDATE"
-	MsgClaim          = "CLAIM"
-	MsgPlay           = "PLAY"
-	MsgPause          = "PAUSE"
-	MsgNext           = "NEXT"
-	MsgPrev           = "PREV"
-	MsgSeek           = "SEEK"
+	MsgRegister           = "REGISTER"
+	MsgNowPlaying         = "NOW_PLAYING"
+	MsgPositionUpdate     = "POSITION_UPDATE"
+	MsgClaim              = "CLAIM"
+	MsgPlay               = "PLAY"
+	MsgPause              = "PAUSE"
+	MsgNext               = "NEXT"
+	MsgPrev               = "PREV"
+	MsgSeek               = "SEEK"
+	MsgPlaySong           = "PLAY_SONG"
+	MsgLoadQueue          = "LOAD_QUEUE"
+	MsgSetQueue           = "SET_QUEUE"
+	MsgSetPlaybackOptions = "SET_PLAYBACK_OPTIONS"
 
 	// Outbound
 	MsgStateSync  = "STATE_SYNC"
@@ -64,12 +68,26 @@ type inboundMessage struct {
 	envelope Envelope
 }
 
+// QueueItem represents a song in the playback queue.
+type QueueItem struct {
+	SongID       string `json:"songId"`
+	Title        string `json:"title"`
+	Artist       string `json:"artist"`
+	Album        string `json:"album"`
+	CoverArtID   string `json:"coverArtId"`
+	DurationSecs int    `json:"durationSecs"`
+}
+
 // Hub maintains connected clients and the shared playback state.
 type Hub struct {
 	mu             sync.RWMutex
 	clients        map[string]*Client
 	activeClientID string
 	state          *NowPlayingState
+	queue          []QueueItem
+	queueIndex     int
+	shuffle        bool
+	repeatMode     string // "off", "all", "one"
 
 	register   chan *Client
 	unregister chan *Client
@@ -79,6 +97,7 @@ type Hub struct {
 func NewHub() *Hub {
 	return &Hub{
 		clients:    make(map[string]*Client),
+		repeatMode: "off",
 		register:   make(chan *Client),
 		unregister: make(chan *Client),
 		incoming:   make(chan inboundMessage, 64),
@@ -142,8 +161,14 @@ func (h *Hub) HandleWS(w http.ResponseWriter, r *http.Request) {
 		log.Printf("ws upgrade error: %v", err)
 		return
 	}
+
+	clientID := r.URL.Query().Get("clientId")
+	if clientID == "" {
+		clientID = uuid.New().String()
+	}
+
 	c := &Client{
-		ID:   uuid.New().String(),
+		ID:   clientID,
 		hub:  h,
 		conn: conn,
 		send: make(chan []byte, 64),
@@ -157,9 +182,14 @@ func (h *Hub) HandleWS(w http.ResponseWriter, r *http.Request) {
 
 func (h *Hub) handleRegister(c *Client) {
 	h.mu.Lock()
+	if existing, ok := h.clients[c.ID]; ok {
+		log.Printf("client reconnected id=%s, overriding old connection", c.ID)
+		existing.conn.Close()
+	}
+
 	h.clients[c.ID] = c
 	// First client becomes active; subsequent ones are observers.
-	if h.activeClientID == "" {
+	if h.activeClientID == "" || h.activeClientID == c.ID {
 		c.Role = "active"
 		h.activeClientID = c.ID
 	} else {
@@ -182,18 +212,16 @@ func (h *Hub) handleRegister(c *Client) {
 
 func (h *Hub) handleUnregister(c *Client) {
 	h.mu.Lock()
-	if _, ok := h.clients[c.ID]; !ok {
+	if existing, ok := h.clients[c.ID]; !ok || existing != c {
 		h.mu.Unlock()
 		return
 	}
 	delete(h.clients, c.ID)
 	close(c.send)
 
-	// If the active client disconnected, clear active state.
+	// Keep active state alive, even if the active client disconnected,
+	// allowing for seamless reconnections.
 	wasActive := h.activeClientID == c.ID
-	if wasActive {
-		h.activeClientID = ""
-	}
 	h.mu.Unlock()
 
 	log.Printf("client disconnected id=%s wasActive=%v", c.ID, wasActive)
@@ -213,7 +241,11 @@ func (h *Hub) handleMessage(msg inboundMessage) {
 		h.onPositionUpdate(msg)
 	case MsgClaim:
 		h.onClaim(msg)
-	case MsgPlay, MsgPause, MsgNext, MsgPrev, MsgSeek:
+	case MsgSetQueue:
+		h.onSetQueue(msg)
+	case MsgSetPlaybackOptions:
+		h.onSetPlaybackOptions(msg)
+	case MsgPlay, MsgPause, MsgNext, MsgPrev, MsgSeek, MsgPlaySong, MsgLoadQueue:
 		h.onTransportCommand(msg)
 	default:
 		msg.client.sendError("UNKNOWN_TYPE", "unrecognized message type: "+msg.envelope.Type)
@@ -232,10 +264,17 @@ func (h *Hub) onRegisterMsg(msg inboundMessage) {
 	if newID := msg.envelope.ClientID; newID != "" && newID != msg.client.ID {
 		oldID := msg.client.ID
 		delete(h.clients, oldID)
+
+		if existing, ok := h.clients[newID]; ok {
+			existing.conn.Close()
+		}
+
 		msg.client.ID = newID
 		h.clients[newID] = msg.client
-		if h.activeClientID == oldID {
+
+		if h.activeClientID == oldID || h.activeClientID == newID {
 			h.activeClientID = newID
+			msg.client.Role = "active"
 		}
 	}
 	h.mu.Unlock()
@@ -305,8 +344,14 @@ func (h *Hub) onClaim(msg inboundMessage) {
 	}
 	h.mu.Unlock()
 
-	// Notify the displaced client of its new role.
+	// Tell the displaced client to stop playback and switch to observer.
 	if prevClient != nil && prevClient.ID != msg.client.ID {
+		prevClient.sendJSON(Envelope{
+			Type: MsgCommand,
+			Payload: map[string]any{
+				"action": "STOP",
+			},
+		})
 		prevClient.sendJSON(Envelope{
 			Type: MsgRoleChange,
 			Payload: map[string]string{
@@ -328,38 +373,92 @@ func (h *Hub) onClaim(msg inboundMessage) {
 	h.broadcastStateSync()
 }
 
-// onTransportCommand handles PLAY, PAUSE, NEXT, PREV, SEEK.
-// Only the active client may issue these; they are forwarded as COMMAND messages.
+// onTransportCommand handles PLAY, PAUSE, NEXT, PREV, SEEK, PLAY_SONG, PLAY_QUEUE.
+// It forwards the command to the active client, passing through any provided payload.
 func (h *Hub) onTransportCommand(msg inboundMessage) {
 	h.mu.RLock()
 	activeID := h.activeClientID
 	activeClient := h.clients[activeID]
 	h.mu.RUnlock()
 
-	if msg.client.ID != activeID {
-		msg.client.sendError("NOT_ACTIVE", "only the active client may send transport commands")
-		return
-	}
-
 	if activeClient == nil {
+		msg.client.sendError("NO_ACTIVE_CLIENT", "no active client to receive transport commands")
 		return
 	}
 
-	// Extract positionSecs from SEEK payload, nil for other commands.
-	var positionSecs any
-	if msg.envelope.Type == MsgSeek {
-		if pm, ok := msg.envelope.Payload.(map[string]any); ok {
-			positionSecs = pm["positionSecs"]
+	payload := map[string]any{
+		"action": msg.envelope.Type,
+	}
+
+	if pm, ok := msg.envelope.Payload.(map[string]any); ok {
+		for k, v := range pm {
+			payload[k] = v
 		}
 	}
 
 	activeClient.sendJSON(Envelope{
-		Type: MsgCommand,
-		Payload: map[string]any{
-			"action":       msg.envelope.Type,
-			"positionSecs": positionSecs,
-		},
+		Type:    MsgCommand,
+		Payload: payload,
 	})
+}
+
+// onSetQueue stores the playback queue sent by the active client.
+func (h *Hub) onSetQueue(msg inboundMessage) {
+	h.mu.Lock()
+	if msg.client.ID != h.activeClientID {
+		h.mu.Unlock()
+		msg.client.sendError("NOT_ACTIVE", "only the active client may set the queue")
+		return
+	}
+
+	data, err := json.Marshal(msg.envelope.Payload)
+	if err != nil {
+		h.mu.Unlock()
+		msg.client.sendError("BAD_PAYLOAD", "invalid SET_QUEUE payload")
+		return
+	}
+	var payload struct {
+		Queue      []QueueItem `json:"queue"`
+		QueueIndex int         `json:"queueIndex"`
+	}
+	if err := json.Unmarshal(data, &payload); err != nil {
+		h.mu.Unlock()
+		msg.client.sendError("BAD_PAYLOAD", "invalid SET_QUEUE payload")
+		return
+	}
+	h.queue = payload.Queue
+	h.queueIndex = payload.QueueIndex
+	h.mu.Unlock()
+
+	log.Printf("queue updated client=%s items=%d index=%d", msg.client.ID, len(payload.Queue), payload.QueueIndex)
+	h.broadcastStateSync()
+}
+
+// onSetPlaybackOptions stores shuffle/repeat from the active client.
+func (h *Hub) onSetPlaybackOptions(msg inboundMessage) {
+	h.mu.Lock()
+	if msg.client.ID != h.activeClientID {
+		h.mu.Unlock()
+		msg.client.sendError("NOT_ACTIVE", "only the active client may set playback options")
+		return
+	}
+	if pm, ok := msg.envelope.Payload.(map[string]any); ok {
+		if s, ok := pm["shuffle"].(bool); ok {
+			h.shuffle = s
+		}
+		if r, ok := pm["repeatMode"].(string); ok {
+			switch r {
+			case "off", "all", "one":
+				h.repeatMode = r
+			default:
+				// ignore invalid values
+			}
+		}
+	}
+	h.mu.Unlock()
+
+	log.Printf("playback options updated client=%s shuffle=%v repeat=%s", msg.client.ID, h.shuffle, h.repeatMode)
+	h.broadcastStateSync()
 }
 
 // --- Broadcasting helpers ---
@@ -379,6 +478,10 @@ func (h *Hub) buildStateSyncPayload() map[string]any {
 		"activeClientId": h.activeClientID,
 		"song":           h.state,
 		"clients":        ci,
+		"queue":          h.queue,
+		"queueIndex":     h.queueIndex,
+		"shuffle":        h.shuffle,
+		"repeatMode":     h.repeatMode,
 	}
 }
 
