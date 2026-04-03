@@ -36,8 +36,8 @@ func NewClient(baseURL, user, password string) *Client {
 // subsonicResponse mirrors the minimal JSON structure returned by the Subsonic API.
 type subsonicResponse struct {
 	SubsonicResponse struct {
-		Status     string `json:"status"`
-		Error      struct {
+		Status string `json:"status"`
+		Error  struct {
 			Code    int    `json:"code"`
 			Message string `json:"message"`
 		} `json:"error"`
