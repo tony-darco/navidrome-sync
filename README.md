@@ -47,6 +47,10 @@ navidrome-sync consists of three components:
 | `POLL_INTERVAL_SECS`| Polling interval for `getNowPlaying`    | `5`                      |
 | `PORT`              | Port for the sync service               | `8080`                   |
 
+## Demo
+
+![Demo](demo-4.gif)
+
 ## iOS App
 The iOS app must be built and run via Xcode. Point the app at the sync service URL on the local network.
 

@@ -203,22 +203,22 @@ function ActiveView({ song }: { song: NowPlayingSong }) {
   const [seekPos, setSeekPos] = useState<number | null>(null);
 
   return (
-    <div className="flex flex-col items-center justify-center gap-6 p-6 w-full max-w-xl mx-auto min-h-[calc(100vh-12rem)]">
+    <div className="flex flex-col items-center justify-center gap-4 p-6 w-full max-w-xl mx-auto h-full overflow-hidden">
 
       <img
         src={getCoverArtUrl(song.coverArtId, 600)}
         alt={`${song.album} cover`}
-        className="w-full max-w-[300px] sm:max-w-[400px] md:max-w-[500px] aspect-square rounded-lg shadow-lg object-cover bg-zinc-800"
+        className="w-48 h-48 sm:w-64 sm:h-64 md:w-72 md:h-72 rounded-lg shadow-lg object-cover bg-zinc-800 flex-shrink-0"
       />
 
-      <div className="text-center w-full px-4">
-        <h2 className="text-2xl sm:text-3xl font-bold truncate">{song.title}</h2>
-        <p className="text-lg sm:text-xl text-zinc-400 truncate mt-1">{song.artist}</p>
-        <p className="text-sm sm:text-base text-zinc-500 truncate mt-1">{song.album}</p>
+      <div className="text-center w-full px-4 flex-shrink-0">
+        <h2 className="text-xl sm:text-2xl font-bold truncate">{song.title}</h2>
+        <p className="text-base sm:text-lg text-zinc-400 truncate mt-0.5">{song.artist}</p>
+        <p className="text-sm text-zinc-500 truncate">{song.album}</p>
       </div>
 
       {/* Seek bar */}
-      <div className="w-full flex items-center gap-2">
+      <div className="w-full flex items-center gap-2 flex-shrink-0">
         <span className="text-xs text-zinc-500 tabular-nums w-10 text-right">
           {formatTime(seekPos ?? position)}
         </span>
@@ -240,7 +240,7 @@ function ActiveView({ song }: { song: NowPlayingSong }) {
       </div>
 
       {/* Transport controls */}
-      <div className="flex items-center gap-6 sm:gap-8">
+      <div className="flex items-center gap-6 sm:gap-8 flex-shrink-0">
         {/* Shuffle */}
         <button
           onClick={toggleShuffle}
@@ -295,7 +295,7 @@ function ActiveView({ song }: { song: NowPlayingSong }) {
         </button>
       </div>
 
-      <div className="flex items-center gap-4">
+      <div className="flex items-center gap-4 flex-shrink-0">
         <span className="text-xs text-blue-500 font-medium">Active Client</span>
         <QueueButton />
       </div>
@@ -333,21 +333,21 @@ function ObserverView({
   }, [song.positionSecs, song.durationSecs, lastSyncTime]);
 
   return (
-    <div className="flex flex-col items-center justify-center gap-6 p-6 w-full max-w-xl mx-auto min-h-[calc(100vh-12rem)]">
+    <div className="flex flex-col items-center justify-center gap-4 p-6 w-full max-w-xl mx-auto h-full overflow-hidden">
       <img
         src={getCoverArtUrl(song.coverArtId, 600)}
         alt={`${song.album} cover`}
-        className="w-full max-w-[300px] sm:max-w-[400px] md:max-w-[500px] aspect-square rounded-lg shadow-lg object-cover bg-zinc-800"
+        className="w-48 h-48 sm:w-64 sm:h-64 md:w-72 md:h-72 rounded-lg shadow-lg object-cover bg-zinc-800 flex-shrink-0"
       />
 
-      <div className="text-center w-full px-4">
-        <h2 className="text-2xl sm:text-3xl font-bold truncate">{song.title}</h2>
-        <p className="text-lg sm:text-xl text-zinc-400 truncate mt-1">{song.artist}</p>
-        <p className="text-sm sm:text-base text-zinc-500 truncate mt-1">{song.album}</p>
+      <div className="text-center w-full px-4 flex-shrink-0">
+        <h2 className="text-xl sm:text-2xl font-bold truncate">{song.title}</h2>
+        <p className="text-base sm:text-lg text-zinc-400 truncate mt-0.5">{song.artist}</p>
+        <p className="text-sm text-zinc-500 truncate">{song.album}</p>
       </div>
 
       {/* Read-only progress bar */}
-      <div className="w-full flex items-center gap-2">
+      <div className="w-full flex items-center gap-2 flex-shrink-0">
         <span className="text-xs text-zinc-500 tabular-nums w-10 text-right">
           {formatTime(interpolatedPos)}
         </span>
@@ -363,7 +363,7 @@ function ObserverView({
       </div>
 
       {/* Transport controls */}
-      <div className="flex items-center gap-6 sm:gap-8">
+      <div className="flex items-center gap-6 sm:gap-8 flex-shrink-0">
         {/* Shuffle */}
         <button
           onClick={toggleShuffle}
@@ -414,7 +414,7 @@ function ObserverView({
         </button>
       </div>
 
-      <div className="flex items-center gap-4">
+      <div className="flex items-center gap-4 flex-shrink-0">
         <span className="text-xs text-zinc-500">Observing</span>
         <QueueButton />
         <PlayHereButton />
