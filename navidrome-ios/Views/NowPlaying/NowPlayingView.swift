@@ -192,7 +192,7 @@ struct NowPlayingView: View {
             Button { store.toggleShuffle() } label: {
                 Image(systemName: "shuffle")
                     .font(.title3)
-                    .foregroundStyle(store.isShuffled ? .green : .secondary)
+                    .foregroundStyle(store.isShuffled ? .blue : .secondary)
             }
 
             Spacer()
@@ -200,7 +200,7 @@ struct NowPlayingView: View {
             Button { store.toggleRepeat() } label: {
                 Image(systemName: store.repeatMode == .one ? "repeat.1" : "repeat")
                     .font(.title3)
-                    .foregroundStyle(store.repeatMode != .off ? .green : .secondary)
+                    .foregroundStyle(store.repeatMode != .off ? .blue : .secondary)
             }
 
             Spacer()
@@ -289,7 +289,7 @@ struct QueueSheet: View {
                 Text(song.title)
                     .font(.subheadline)
                     .fontWeight(isActive ? .semibold : .regular)
-                    .foregroundStyle(isActive ? .green : .primary)
+                    .foregroundStyle(isActive ? .blue : .primary)
                     .lineLimit(1)
                 Text(song.artist)
                     .font(.caption)

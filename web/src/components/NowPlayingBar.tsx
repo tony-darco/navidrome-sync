@@ -26,7 +26,7 @@ export default function NowPlayingBar() {
       <span
         className={`text-[10px] font-medium px-2 py-0.5 rounded-full ${
           myRole === 'active'
-            ? 'bg-green-900/50 text-green-400'
+            ? 'bg-blue-900/50 text-blue-400'
             : 'bg-zinc-800 text-zinc-500'
         }`}
       >

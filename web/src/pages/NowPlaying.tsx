@@ -42,7 +42,7 @@ function QueueButton() {
   return (
     <button
       onClick={() => setShowQueue(!showQueue)}
-      className={`transition-colors ${showQueue ? 'text-green-500' : 'text-zinc-500 hover:text-white'}`}
+      className={`transition-colors ${showQueue ? 'text-blue-500' : 'text-zinc-500 hover:text-white'}`}
       aria-label="Queue"
       title="Queue"
     >
@@ -93,7 +93,7 @@ function QueueView({ isActive }: { isActive: boolean }) {
               className="w-12 h-12 rounded object-cover bg-zinc-800 flex-shrink-0"
             />
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-green-500 truncate">{nowPlaying.title}</p>
+              <p className="text-sm font-medium text-blue-500 truncate">{nowPlaying.title}</p>
               <p className="text-xs text-zinc-400 truncate">{nowPlaying.artist}</p>
             </div>
             <span className="text-xs text-zinc-500 truncate hidden sm:block max-w-[120px]">{nowPlaying.album}</span>
@@ -232,7 +232,7 @@ function ActiveView({ song }: { song: NowPlayingSong }) {
           onMouseUp={(e) => { seek(Number((e.target as HTMLInputElement).value)); setSeekPos(null); }}
           onTouchStart={() => setSeekPos(position)}
           onTouchEnd={(e) => { seek(Number((e.target as HTMLInputElement).value)); setSeekPos(null); }}
-          className="flex-1 accent-green-500"
+          className="flex-1 accent-blue-500"
         />
         <span className="text-xs text-zinc-500 tabular-nums w-10">
           {formatTime(song.durationSecs)}
@@ -244,7 +244,7 @@ function ActiveView({ song }: { song: NowPlayingSong }) {
         {/* Shuffle */}
         <button
           onClick={toggleShuffle}
-          className={`transition-colors ${shuffle ? 'text-green-500' : 'text-zinc-500 hover:text-white'}`}
+          className={`transition-colors ${shuffle ? 'text-blue-500' : 'text-zinc-500 hover:text-white'}`}
           aria-label="Shuffle"
           title="Shuffle"
         >
@@ -282,7 +282,7 @@ function ActiveView({ song }: { song: NowPlayingSong }) {
         {/* Repeat */}
         <button
           onClick={cycleRepeatMode}
-          className={`relative transition-colors ${repeatMode !== 'off' ? 'text-green-500' : 'text-zinc-500 hover:text-white'}`}
+          className={`relative transition-colors ${repeatMode !== 'off' ? 'text-blue-500' : 'text-zinc-500 hover:text-white'}`}
           aria-label={`Repeat: ${repeatMode}`}
           title={`Repeat: ${repeatMode}`}
         >
@@ -290,13 +290,13 @@ function ActiveView({ song }: { song: NowPlayingSong }) {
             <path d="M7 7h10v3l4-4-4-4v3H5v6h2V7zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2v4z" />
           </svg>
           {repeatMode === 'one' && (
-            <span className="absolute -top-1 -right-1 text-[9px] font-bold text-green-500">1</span>
+            <span className="absolute -top-1 -right-1 text-[9px] font-bold text-blue-500">1</span>
           )}
         </button>
       </div>
 
       <div className="flex items-center gap-4">
-        <span className="text-xs text-green-500 font-medium">Active Client</span>
+        <span className="text-xs text-blue-500 font-medium">Active Client</span>
         <QueueButton />
       </div>
     </div>
@@ -367,7 +367,7 @@ function ObserverView({
         {/* Shuffle */}
         <button
           onClick={toggleShuffle}
-          className={`transition-colors ${shuffle ? 'text-green-500' : 'text-zinc-500 hover:text-white'}`}
+          className={`transition-colors ${shuffle ? 'text-blue-500' : 'text-zinc-500 hover:text-white'}`}
           aria-label="Shuffle"
           title="Shuffle"
         >
@@ -401,7 +401,7 @@ function ObserverView({
         {/* Repeat */}
         <button
           onClick={cycleRepeatMode}
-          className={`relative transition-colors ${repeatMode !== 'off' ? 'text-green-500' : 'text-zinc-500 hover:text-white'}`}
+          className={`relative transition-colors ${repeatMode !== 'off' ? 'text-blue-500' : 'text-zinc-500 hover:text-white'}`}
           aria-label={`Repeat: ${repeatMode}`}
           title={`Repeat: ${repeatMode}`}
         >
@@ -409,7 +409,7 @@ function ObserverView({
             <path d="M7 7h10v3l4-4-4-4v3H5v6h2V7zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2v4z" />
           </svg>
           {repeatMode === 'one' && (
-            <span className="absolute -top-1 -right-1 text-[9px] font-bold text-green-500">1</span>
+            <span className="absolute -top-1 -right-1 text-[9px] font-bold text-blue-500">1</span>
           )}
         </button>
       </div>

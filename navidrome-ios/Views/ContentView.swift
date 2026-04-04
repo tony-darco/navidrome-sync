@@ -73,13 +73,13 @@ struct NowPlayingBar: View {
                         .fontWeight(.medium)
                         .padding(.horizontal, 8)
                         .padding(.vertical, 4)
-                        .background(store.myRole == "active" ? Color.green.opacity(0.2) : Color.secondary.opacity(0.2))
-                        .foregroundStyle(store.myRole == "active" ? .green : .secondary)
+                        .background(store.myRole == "active" ? Color.blue.opacity(0.2) : Color.secondary.opacity(0.2))
+                        .foregroundStyle(store.myRole == "active" ? .blue : .secondary)
                         .clipShape(Capsule())
 
                     // Connection dot
                     Circle()
-                        .fill(Color.green)
+                        .fill(Color.blue)
                         .frame(width: 8, height: 8)
                 }
             }

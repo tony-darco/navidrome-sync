@@ -15,7 +15,7 @@ struct SettingsView: View {
                         Spacer()
                         HStack(spacing: 6) {
                             Circle()
-                                .fill(store.isConnected ? Color.green : Color.red)
+                                .fill(store.isConnected ? Color.blue : Color.red)
                                 .frame(width: 8, height: 8)
                             Text(store.isConnected ? "Online" : "Disconnected")
                                 .foregroundStyle(.secondary)
