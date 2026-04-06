@@ -200,7 +200,8 @@ func (h *Hub) handleRegister(c *Client) {
 	h.clients[c.ID] = c
 
 	// Assign roles based on active client status.
-	if h.activeClientID == "" {
+	_, activeExists := h.clients[h.activeClientID]
+	if h.activeClientID == "" || h.activeClientID == c.ID || !activeExists {
 		c.Role = "active"
 		h.activeClientID = c.ID
 	} else {
@@ -230,14 +231,40 @@ func (h *Hub) handleUnregister(c *Client) {
 	delete(h.clients, c.ID)
 	close(c.send)
 
-	// Keep active state alive, even if the active client disconnected,
-	// allowing for seamless reconnections.
 	wasActive := h.activeClientID == c.ID
-	h.mu.Unlock()
-
-	log.Printf("client disconnected id=%s wasActive=%v", c.ID, wasActive)
 
 	if wasActive {
+		// The client that was actually playing audio is gone — pause state.
+		if h.state != nil {
+			h.state.IsPlaying = false
+		}
+
+		// Promote the first remaining client to active, if any.
+		h.activeClientID = ""
+		for _, candidate := range h.clients {
+			h.activeClientID = candidate.ID
+			candidate.Role = "active"
+			break
+		}
+	}
+	h.mu.Unlock()
+
+	log.Printf("client disconnected id=%s wasActive=%v newActive=%s", c.ID, wasActive, h.activeClientID)
+
+	if wasActive {
+		// Notify the promoted client of its new role.
+		h.mu.RLock()
+		promoted := h.clients[h.activeClientID]
+		h.mu.RUnlock()
+		if promoted != nil {
+			promoted.sendJSON(Envelope{
+				Type: MsgRoleChange,
+				Payload: map[string]string{
+					"clientId": promoted.ID,
+					"role":     "active",
+				},
+			})
+		}
 		h.broadcastStateSync()
 	}
 }

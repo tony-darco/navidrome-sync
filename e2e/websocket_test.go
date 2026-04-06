@@ -176,6 +176,12 @@ func TestActiveClientDisconnect(t *testing.T) {
 
 	connA.Close()
 
+	// B gets promoted: ROLE_CHANGE then STATE_SYNC
+	msgRoleB := readEnv(t, recvB)
+	if msgRoleB.Type != hub.MsgRoleChange {
+		t.Fatalf("expected ROLE_CHANGE, got %s", msgRoleB.Type)
+	}
+
 	msgSyncB := readEnv(t, recvB)
 	if msgSyncB.Type != hub.MsgStateSync {
 		t.Fatal(msgSyncB.Type)

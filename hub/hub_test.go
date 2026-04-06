@@ -168,7 +168,7 @@ func TestCommandsForwardedToActiveClient(t *testing.T) {
 	}
 }
 
-func TestDisconnectActiveClientKeepsState(t *testing.T) {
+func TestDisconnectActiveClientClearsActive(t *testing.T) {
 	h := NewHub()
 	go h.Run()
 
@@ -178,14 +178,31 @@ func TestDisconnectActiveClientKeepsState(t *testing.T) {
 	readMessage(t, c1)
 	readMessage(t, c1)
 
+	// Set some state so we can verify it's preserved (but paused)
+	sendInboundMsg(h, c1, MsgNowPlaying, map[string]interface{}{
+		"songId": "song-1", "title": "Test", "artist": "Artist",
+	})
+	readMessage(t, c1) // state sync
+
 	h.unregister <- c1
 	time.Sleep(50 * time.Millisecond)
 
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 
-	if h.activeClientID != "client-1" {
-		t.Errorf("expected active client client-1, got %s", h.activeClientID)
+	// With no remaining clients, activeClientID should be cleared
+	if h.activeClientID != "" {
+		t.Errorf("expected activeClientID to be empty, got %s", h.activeClientID)
+	}
+	// Song state should be preserved but paused
+	if h.state == nil {
+		t.Fatal("expected state to be preserved")
+	}
+	if h.state.IsPlaying {
+		t.Error("expected isPlaying to be false after active client disconnected")
+	}
+	if h.state.SongID != "song-1" {
+		t.Errorf("expected song state to be preserved, got songId=%s", h.state.SongID)
 	}
 }
 
@@ -325,5 +342,151 @@ func TestTransportCommandWithNoActiveClient(t *testing.T) {
 	errPayload, _ := msg.Payload.(map[string]interface{})
 	if errPayload["code"] != "NO_ACTIVE_CLIENT" {
 		t.Errorf("expected NO_ACTIVE_CLIENT error, got %v", errPayload["code"])
+	}
+}
+
+func TestNextClientBecomesActiveWhenActiveDisconnects(t *testing.T) {
+	h := NewHub()
+	go h.Run()
+
+	c1 := createFakeClient("client-1", "")
+	c2 := createFakeClient("client-2", "")
+
+	// 1. c1 connects (becomes active)
+	h.register <- c1
+	msgRole1 := readMessage(t, c1)
+	if payload, ok := msgRole1.Payload.(map[string]interface{}); ok && payload["role"] != "active" {
+		t.Fatalf("expected c1 to be active, got %s", payload["role"])
+	}
+	readMessage(t, c1) // state sync
+
+	// 2. c2 connects (becomes observer)
+	h.register <- c2
+	msgRole2 := readMessage(t, c2)
+	if payload, ok := msgRole2.Payload.(map[string]interface{}); ok && payload["role"] != "observer" {
+		t.Fatalf("expected c2 to be observer, got %s", payload["role"])
+	}
+	readMessage(t, c2) // state sync
+
+	// 3. c1 disconnects — c2 should be promoted to active
+	h.unregister <- c1
+	time.Sleep(50 * time.Millisecond)
+
+	// c2 should receive ROLE_CHANGE (promoted) and STATE_SYNC
+	msgPromotion := readMessage(t, c2)
+	if msgPromotion.Type != MsgRoleChange {
+		t.Fatalf("expected ROLE_CHANGE for promotion, got %s", msgPromotion.Type)
+	}
+	if payload, ok := msgPromotion.Payload.(map[string]interface{}); ok {
+		if payload["role"] != "active" {
+			t.Fatalf("expected c2 to be promoted to active, got %s", payload["role"])
+		}
+	}
+
+	readMessage(t, c2) // state sync broadcast
+
+	h.mu.RLock()
+	activeID := h.activeClientID
+	c2Role := c2.Role
+	h.mu.RUnlock()
+
+	if activeID != "client-2" {
+		t.Errorf("expected activeClientID to be client-2, got %s", activeID)
+	}
+	if c2Role != "active" {
+		t.Errorf("expected c2.Role to be active, got %s", c2Role)
+	}
+}
+
+func TestIsPlayingPausedWhenActiveDisconnects(t *testing.T) {
+	h := NewHub()
+	go h.Run()
+
+	c1 := createFakeClient("client-1", "")
+	c2 := createFakeClient("client-2", "")
+
+	h.register <- c1
+	readMessage(t, c1) // role change
+	readMessage(t, c1) // state sync
+
+	h.register <- c2
+	readMessage(t, c2) // role change
+	readMessage(t, c2) // state sync
+
+	// Set a playing state
+	sendInboundMsg(h, c1, MsgNowPlaying, map[string]interface{}{
+		"songId": "song-1", "title": "Test", "artist": "Artist",
+	})
+	readMessage(t, c1) // state sync
+	readMessage(t, c2) // state sync
+
+	h.mu.RLock()
+	if !h.state.IsPlaying {
+		t.Fatal("state should be playing after NOW_PLAYING")
+	}
+	h.mu.RUnlock()
+
+	// Active client disconnects — isPlaying should become false
+	h.unregister <- c1
+	time.Sleep(50 * time.Millisecond)
+
+	// Drain c2's messages (role change + state sync)
+	readMessage(t, c2)
+	readMessage(t, c2)
+
+	h.mu.RLock()
+	isPlaying := h.state.IsPlaying
+	h.mu.RUnlock()
+
+	if isPlaying {
+		t.Error("expected isPlaying to be false after active client disconnected")
+	}
+}
+
+func TestNewClientGetsActiveWhenNoActiveExists(t *testing.T) {
+	h := NewHub()
+	go h.Run()
+
+	c1 := createFakeClient("client-1", "")
+
+	// c1 connects (active), then disconnects
+	h.register <- c1
+	readMessage(t, c1)
+	readMessage(t, c1)
+
+	h.unregister <- c1
+	time.Sleep(50 * time.Millisecond)
+
+	// No clients left. c2 connects — should become active
+	c2 := createFakeClient("client-2", "")
+	h.register <- c2
+	msgRole := readMessage(t, c2)
+	if payload, ok := msgRole.Payload.(map[string]interface{}); ok && payload["role"] != "active" {
+		t.Fatalf("expected c2 to be active, got %s", payload["role"])
+	}
+}
+
+func TestActiveClientReconnects(t *testing.T) {
+	h := NewHub()
+	go h.Run()
+
+	c1 := createFakeClient("client-1", "")
+
+	// 1. c1 connects (becomes active)
+	h.register <- c1
+	readMessage(t, c1) // role change
+	readMessage(t, c1) // state sync
+
+	// 2. c1 disconnects
+	h.unregister <- c1
+	time.Sleep(50 * time.Millisecond)
+
+	// 3. c1 reconnects. it should reclaim active.
+	c1Reconnected := createFakeClient("client-1", "")
+	h.register <- c1Reconnected
+
+	msgRole := readMessage(t, c1Reconnected)
+	if payload, ok := msgRole.Payload.(map[string]interface{}); ok && payload["role"] != "active" {
+		t.Fatalf("expected reconnected c1 to be active, got %s", payload["role"])
 	}
 }
