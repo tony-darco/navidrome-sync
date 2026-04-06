@@ -15,6 +15,7 @@ struct NavidromeApp: App {
                     .preferredColorScheme(.dark)
                     .onAppear {
                         playlistStore.bind(to: syncStore)
+                        syncStore.connect()
                     }
             } else {
                 LoginView(isLoggedIn: $isLoggedIn)
