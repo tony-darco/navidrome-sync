@@ -17,12 +17,14 @@ nonisolated enum MessageType: String, Codable, Sendable {
     case loadQueue = "LOAD_QUEUE"
     case setQueue = "SET_QUEUE"
     case setPlaybackOptions = "SET_PLAYBACK_OPTIONS"
+    case playlistChanged = "PLAYLIST_CHANGED"
 
     // Outbound (server → client)
     case stateSync = "STATE_SYNC"
     case command = "COMMAND"
     case roleChange = "ROLE_CHANGE"
     case error = "ERROR"
+    case playlistInvalidate = "PLAYLIST_INVALIDATE"
 }
 
 // MARK: - Envelope
@@ -97,6 +99,16 @@ nonisolated struct LoadQueuePayload: Codable, Sendable {
 nonisolated struct ErrorPayload: Codable, Sendable {
     let code: String
     let message: String
+}
+
+nonisolated struct PlaylistChangedPayload: Codable, Sendable {
+    let playlistId: String
+    let action: String
+}
+
+nonisolated struct PlaylistInvalidation: Equatable, Sendable {
+    let playlistId: String
+    let action: String
 }
 
 nonisolated struct QueueItemPayload: Codable, Sendable {

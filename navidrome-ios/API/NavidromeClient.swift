@@ -81,6 +81,102 @@ actor NavidromeClient {
         return (albums: result?.album ?? [], songs: result?.song ?? [])
     }
 
+    // MARK: - Artist APIs
+
+    func getArtists() async throws -> [ArtistIndex] {
+        let url = try buildURL(path: "/rest/getArtists.view")
+        let (data, _) = try await session.data(from: url)
+        let wrapper = try JSONDecoder().decode(SubsonicWrapper.self, from: data)
+        return wrapper.subsonicResponse.artists?.index ?? []
+    }
+
+    func getArtist(id: String) async throws -> ArtistDetail {
+        let url = try buildURL(path: "/rest/getArtist.view", params: ["id": id])
+        let (data, _) = try await session.data(from: url)
+        let wrapper = try JSONDecoder().decode(SubsonicWrapper.self, from: data)
+        guard let artist = wrapper.subsonicResponse.artist else {
+            throw NavidromeError.badResponse
+        }
+        return artist
+    }
+
+    // MARK: - Song APIs
+
+    func getSongs(offset: Int = 0, count: Int = 50) async throws -> [Song] {
+        let url = try buildURL(path: "/rest/search3.view", params: [
+            "query": "",
+            "songCount": String(count),
+            "songOffset": String(offset),
+            "artistCount": "0",
+            "albumCount": "0",
+        ])
+        let (data, _) = try await session.data(from: url)
+        let wrapper = try JSONDecoder().decode(SubsonicWrapper.self, from: data)
+        return wrapper.subsonicResponse.searchResult3?.song ?? []
+    }
+
+    // MARK: - Playlist APIs
+
+    func getPlaylists() async throws -> [Playlist] {
+        let url = try buildURL(path: "/rest/getPlaylists.view")
+        let (data, _) = try await session.data(from: url)
+        let wrapper = try JSONDecoder().decode(SubsonicWrapper.self, from: data)
+        return wrapper.subsonicResponse.playlists?.playlist ?? []
+    }
+
+    func getPlaylist(id: String) async throws -> PlaylistWithSongs {
+        let url = try buildURL(path: "/rest/getPlaylist.view", params: ["id": id])
+        let (data, _) = try await session.data(from: url)
+        let wrapper = try JSONDecoder().decode(SubsonicWrapper.self, from: data)
+        guard let playlist = wrapper.subsonicResponse.playlist else {
+            throw NavidromeError.badResponse
+        }
+        return playlist
+    }
+
+    func createPlaylist(name: String, songIds: [String] = []) async throws -> String {
+        var params = ["name": name]
+        // songId params need to be repeated in the URL, but for creation with no songs this is fine
+        if songIds.isEmpty {
+            let url = try buildURL(path: "/rest/createPlaylist.view", params: params)
+            let (data, _) = try await session.data(from: url)
+            let wrapper = try JSONDecoder().decode(SubsonicWrapper.self, from: data)
+            return wrapper.subsonicResponse.playlist?.id ?? ""
+        }
+        // Build URL with repeated songId params
+        let url = try buildURL(path: "/rest/createPlaylist.view", params: params)
+        let songParams = songIds.map { "songId=\($0)" }.joined(separator: "&")
+        guard let fullURL = URL(string: url.absoluteString + "&" + songParams) else {
+            throw NavidromeError.invalidURL
+        }
+        let (data, _) = try await session.data(from: fullURL)
+        let wrapper = try JSONDecoder().decode(SubsonicWrapper.self, from: data)
+        return wrapper.subsonicResponse.playlist?.id ?? ""
+    }
+
+    func updatePlaylist(playlistId: String, songIdsToAdd: [String] = [], songIndexesToRemove: [Int] = []) async throws {
+        var url = try buildURL(path: "/rest/updatePlaylist.view", params: ["playlistId": playlistId])
+        var extra = ""
+        for songId in songIdsToAdd {
+            extra += "&songIdToAdd=\(songId)"
+        }
+        for index in songIndexesToRemove {
+            extra += "&songIndexToRemove=\(index)"
+        }
+        if !extra.isEmpty {
+            guard let fullURL = URL(string: url.absoluteString + extra) else {
+                throw NavidromeError.invalidURL
+            }
+            url = fullURL
+        }
+        let (_, _) = try await session.data(from: url)
+    }
+
+    func deletePlaylist(id: String) async throws {
+        let url = try buildURL(path: "/rest/deletePlaylist.view", params: ["id": id])
+        let (_, _) = try await session.data(from: url)
+    }
+
     // MARK: - Media URLs (nonisolated — only reads AppConfig statics)
 
     nonisolated func streamURL(songId: String) -> URL? {

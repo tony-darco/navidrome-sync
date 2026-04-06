@@ -116,6 +116,10 @@ nonisolated struct SubsonicResponse: Decodable, Sendable {
     let albumList2: AlbumList2?
     let album: AlbumWithSongs?
     let searchResult3: SearchResult3?
+    let playlists: PlaylistsWrapper?
+    let playlist: PlaylistWithSongs?
+    let artists: ArtistsWrapper?
+    let artist: ArtistDetail?
 }
 
 nonisolated struct AlbumList2: Decodable, Sendable {
@@ -146,4 +150,118 @@ nonisolated struct AlbumWithSongs: Decodable, Sendable {
 nonisolated struct SearchResult3: Decodable, Sendable {
     let album: [Album]?
     let song: [Song]?
+}
+
+// MARK: - Playlist models
+
+nonisolated struct Playlist: Codable, Identifiable, Sendable, Hashable {
+    let id: String
+    let name: String
+    let songCount: Int
+    let coverArt: String
+
+    private enum CodingKeys: String, CodingKey {
+        case id, name, songCount, coverArt
+    }
+
+    init(id: String, name: String, songCount: Int, coverArt: String) {
+        self.id = id
+        self.name = name
+        self.songCount = songCount
+        self.coverArt = coverArt
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(String.self, forKey: .id)
+        name = (try? c.decode(String.self, forKey: .name)) ?? ""
+        songCount = (try? c.decode(Int.self, forKey: .songCount)) ?? 0
+        coverArt = (try? c.decode(String.self, forKey: .coverArt)) ?? ""
+    }
+}
+
+nonisolated struct PlaylistWithSongs: Decodable, Sendable {
+    let id: String
+    let name: String
+    let songCount: Int
+    let coverArt: String
+    let entry: [Song]?
+
+    private enum CodingKeys: String, CodingKey {
+        case id, name, songCount, coverArt, entry
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(String.self, forKey: .id)
+        name = (try? c.decode(String.self, forKey: .name)) ?? ""
+        songCount = (try? c.decode(Int.self, forKey: .songCount)) ?? 0
+        coverArt = (try? c.decode(String.self, forKey: .coverArt)) ?? ""
+        entry = try? c.decode([Song].self, forKey: .entry)
+    }
+
+    func toPlaylist() -> Playlist {
+        Playlist(id: id, name: name, songCount: songCount, coverArt: coverArt)
+    }
+}
+
+nonisolated struct PlaylistsWrapper: Decodable, Sendable {
+    let playlist: [Playlist]?
+}
+
+// MARK: - Artist models
+
+nonisolated struct ArtistID3: Codable, Identifiable, Sendable, Hashable {
+    let id: String
+    let name: String
+    let albumCount: Int
+
+    private enum CodingKeys: String, CodingKey {
+        case id, name, albumCount
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(String.self, forKey: .id)
+        name = (try? c.decode(String.self, forKey: .name)) ?? ""
+        albumCount = (try? c.decode(Int.self, forKey: .albumCount)) ?? 0
+    }
+}
+
+nonisolated struct ArtistIndex: Codable, Identifiable, Sendable {
+    let name: String
+    let artist: [ArtistID3]
+
+    var id: String { name }
+
+    private enum CodingKeys: String, CodingKey {
+        case name, artist
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        name = (try? c.decode(String.self, forKey: .name)) ?? ""
+        artist = (try? c.decode([ArtistID3].self, forKey: .artist)) ?? []
+    }
+}
+
+nonisolated struct ArtistsWrapper: Decodable, Sendable {
+    let index: [ArtistIndex]?
+}
+
+nonisolated struct ArtistDetail: Decodable, Sendable {
+    let id: String
+    let name: String
+    let album: [Album]?
+
+    private enum CodingKeys: String, CodingKey {
+        case id, name, album
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(String.self, forKey: .id)
+        name = (try? c.decode(String.self, forKey: .name)) ?? ""
+        album = try? c.decode([Album].self, forKey: .album)
+    }
 }
