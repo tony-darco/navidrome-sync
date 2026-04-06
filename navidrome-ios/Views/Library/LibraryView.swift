@@ -2,168 +2,115 @@ import SwiftUI
 
 struct LibraryView: View {
     @EnvironmentObject private var store: SyncStore
-    @State private var albums: [Album] = []
-    @State private var searchText = ""
-    @State private var searchAlbums: [Album] = []
-    @State private var searchSongs: [Song] = []
+    @State private var recentAlbums: [Album] = []
     @State private var isLoading = false
-    @State private var errorMessage: String?
-    @State private var searchTask: Task<Void, Never>?
+
+    private let libraryRows: [(icon: String, title: String)] = [
+        ("music.note.list", "Playlists"),
+        ("music.mic", "Artists"),
+        ("square.stack", "Albums"),
+        ("music.note", "Songs"),
+    ]
 
     var body: some View {
         NavigationStack {
-            Group {
-                if searchText.isEmpty {
-                    albumGrid
-                } else {
-                    searchResults
+            ScrollView {
+                VStack(alignment: .leading, spacing: 0) {
+                    // Navigation rows
+                    VStack(spacing: 0) {
+                        ForEach(libraryRows, id: \.title) { row in
+                            NavigationLink(value: row.title) {
+                                HStack(spacing: 12) {
+                                    Image(systemName: row.icon)
+                                        .foregroundStyle(.accent)
+                                        .frame(width: 24)
+                                    Text(row.title)
+                                        .font(.body)
+                                    Spacer()
+                                    Image(systemName: "chevron.right")
+                                        .font(.caption)
+                                        .foregroundStyle(.tertiary)
+                                }
+                                .padding(.vertical, 12)
+                                .padding(.horizontal, 16)
+                                .contentShape(Rectangle())
+                            }
+                            .buttonStyle(.plain)
+                            if row.title != libraryRows.last?.title {
+                                Divider().padding(.leading, 52)
+                            }
+                        }
+                    }
+                    .background(Color(.secondarySystemGroupedBackground))
+                    .clipShape(RoundedRectangle(cornerRadius: 10))
+                    .padding(.horizontal)
+                    .padding(.top, 8)
+
+                    // Recently Added
+                    if !recentAlbums.isEmpty {
+                        Text("Recently Added")
+                            .font(.title3)
+                            .fontWeight(.bold)
+                            .padding(.horizontal)
+                            .padding(.top, 24)
+                            .padding(.bottom, 8)
+
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            LazyHStack(spacing: 12) {
+                                ForEach(recentAlbums) { album in
+                                    NavigationLink(value: album) {
+                                        VStack(alignment: .leading, spacing: 4) {
+                                            CoverArtImage(id: album.coverArt, size: 300)
+                                                .frame(width: 140, height: 140)
+                                                .clipShape(RoundedRectangle(cornerRadius: 8))
+                                            Text(album.name)
+                                                .font(.caption)
+                                                .fontWeight(.medium)
+                                                .lineLimit(1)
+                                            Text(album.artist)
+                                                .font(.caption2)
+                                                .foregroundStyle(.secondary)
+                                                .lineLimit(1)
+                                        }
+                                        .frame(width: 140)
+                                    }
+                                    .buttonStyle(.plain)
+                                }
+                            }
+                            .padding(.horizontal)
+                        }
+                    }
                 }
             }
+            .background(Color(.systemGroupedBackground))
             .navigationTitle("Library")
-            .searchable(text: $searchText, prompt: "Search albums and songs")
-            .onChange(of: searchText) { _, newValue in
-                debounceSearch(newValue)
+            .navigationDestination(for: String.self) { destination in
+                switch destination {
+                case "Playlists": PlaylistsView()
+                case "Artists": ArtistsView()
+                case "Albums": AlbumsView()
+                case "Songs": SongsView()
+                default: EmptyView()
+                }
+            }
+            .navigationDestination(for: Album.self) { album in
+                AlbumDetailView(albumId: album.id)
             }
             .task {
-                await loadAlbums(force: false)
+                await loadRecentAlbums()
             }
         }
     }
 
-    // MARK: - Album grid (default view)
-
-    private var albumGrid: some View {
-        ScrollView {
-            if isLoading && albums.isEmpty {
-                ProgressView()
-                    .padding(.top, 60)
-            } else if let errorMessage, albums.isEmpty {
-                VStack(spacing: 12) {
-                    Image(systemName: "exclamationmark.triangle")
-                        .font(.largeTitle)
-                        .foregroundStyle(.secondary)
-                    Text(errorMessage)
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                        .multilineTextAlignment(.center)
-                        .padding(.horizontal)
-                    Button("Retry") {
-                        Task { await loadAlbums(force: true) }
-                    }
-                    .buttonStyle(.bordered)
-                }
-                .padding(.top, 60)
-            } else {
-                AlbumGridView(albums: albums)
-            }
-        }
-    }
-
-    // MARK: - Search results
-
-    private var searchResults: some View {
-        List {
-            if !searchAlbums.isEmpty {
-                Section("Albums") {
-                    ForEach(searchAlbums) { album in
-                        NavigationLink(value: album) {
-                            albumRow(album)
-                        }
-                    }
-                }
-            }
-            if !searchSongs.isEmpty {
-                Section("Songs") {
-                    ForEach(searchSongs) { song in
-                        Button { playSingleSong(song) } label: {
-                            songRow(song)
-                        }
-                    }
-                }
-            }
-        }
-        .navigationDestination(for: Album.self) { album in
-            AlbumDetailView(albumId: album.id)
-        }
-    }
-
-    // MARK: - Row views
-
-    private func albumRow(_ album: Album) -> some View {
-        HStack(spacing: 12) {
-            CoverArtImage(id: album.coverArt, size: 80)
-                .frame(width: 50, height: 50)
-                .clipShape(RoundedRectangle(cornerRadius: 6))
-            VStack(alignment: .leading) {
-                Text(album.name).lineLimit(1)
-                Text(album.artist).font(.caption).foregroundStyle(.secondary).lineLimit(1)
-            }
-        }
-    }
-
-    private func songRow(_ song: Song) -> some View {
-        HStack(spacing: 12) {
-            CoverArtImage(id: song.coverArt, size: 80)
-                .frame(width: 40, height: 40)
-                .clipShape(RoundedRectangle(cornerRadius: 4))
-            VStack(alignment: .leading) {
-                Text(song.title).lineLimit(1)
-                Text(song.artist).font(.caption).foregroundStyle(.secondary).lineLimit(1)
-            }
-            Spacer()
-            Text(formatDuration(song.duration))
-                .font(.caption)
-                .foregroundStyle(.secondary)
-        }
-    }
-
-    // MARK: - Data loading
-
-    private func loadAlbums(force: Bool = false) async {
-        guard force || albums.isEmpty else { return }
+    private func loadRecentAlbums() async {
+        guard recentAlbums.isEmpty else { return }
         isLoading = true
-        errorMessage = nil
         defer { isLoading = false }
         do {
-            albums = try await NavidromeClient.shared.getAlbums()
-            if albums.isEmpty {
-                errorMessage = "No albums found in your library."
-            }
+            recentAlbums = try await NavidromeClient.shared.getAlbums(type: "newest", size: 20)
         } catch {
-            print("[library] failed to load albums: \(error)")
-            errorMessage = "Could not load albums.\n\(error.localizedDescription)"
+            print("[library] failed to load recent albums: \(error)")
         }
-    }
-
-    private func debounceSearch(_ query: String) {
-        searchTask?.cancel()
-        guard !query.isEmpty else {
-            searchAlbums = []
-            searchSongs = []
-            return
-        }
-        searchTask = Task {
-            try? await Task.sleep(for: .milliseconds(300))
-            guard !Task.isCancelled else { return }
-            do {
-                let results = try await NavidromeClient.shared.search(query: query)
-                guard !Task.isCancelled else { return }
-                searchAlbums = results.albums
-                searchSongs = results.songs
-            } catch {
-                print("[library] search error: \(error)")
-            }
-        }
-    }
-
-    private func playSingleSong(_ song: Song) {
-        store.playSong(song.toNowPlayingSong())
-    }
-
-    private func formatDuration(_ seconds: Int) -> String {
-        let m = seconds / 60
-        let s = seconds % 60
-        return String(format: "%d:%02d", m, s)
     }
 }
 

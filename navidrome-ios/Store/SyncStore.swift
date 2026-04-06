@@ -24,6 +24,8 @@ final class SyncStore: ObservableObject {
     @Published var isShuffled: Bool = false
     @Published var repeatMode: RepeatMode = .off
 
+    @Published var lastPlaylistInvalidation: PlaylistInvalidation? = nil
+
     /// Stores the original (unshuffled) queue order.
     private var originalQueue: [NowPlayingSong] = []
 
@@ -272,6 +274,11 @@ final class SyncStore: ObservableObject {
         if isConnected { sendPlaybackOptions() }
     }
 
+    func notifyPlaylistChanged(playlistId: String, action: String) {
+        sendMessage(type: .playlistChanged, payload: PlaylistChangedPayload(playlistId: playlistId, action: action))
+        lastPlaylistInvalidation = PlaylistInvalidation(playlistId: playlistId, action: action)
+    }
+
     func clearQueue() {
         // Keep only the currently playing song
         if queueIndex < queue.count {
@@ -417,6 +424,13 @@ final class SyncStore: ObservableObject {
         case .command:
             guard let payload = envelope.payload?.decode(CommandPayload.self) else { return }
             handleCommand(payload)
+        case .playlistInvalidate:
+            if let payload = envelope.payload?.decode(PlaylistChangedPayload.self) {
+                lastPlaylistInvalidation = PlaylistInvalidation(
+                    playlistId: payload.playlistId,
+                    action: payload.action
+                )
+            }
         case .error:
             if let payload = envelope.payload?.decode(ErrorPayload.self) {
                 print("[sync] error \(payload.code): \(payload.message)")
