@@ -43,6 +43,9 @@ export function useWebSocket() {
             case 'COMMAND':
               handleCommand(envelope.payload);
               break;
+            case 'PLAYLIST_INVALIDATE':
+              useSyncStore.setState({ lastPlaylistInvalidation: envelope.payload });
+              break;
             case 'ERROR':
               handleError(envelope.payload);
               break;

@@ -35,6 +35,17 @@ export interface Song {
   track: number;
 }
 
+export interface Playlist {
+  id: string;
+  name: string;
+  songCount: number;
+  coverArt: string;
+}
+
+export interface PlaylistWithSongs extends Playlist {
+  entry: Song[];
+}
+
 export async function init() {
   await getConfig();
 }
@@ -88,6 +99,56 @@ export function getCoverArtUrl(id: string, size: number = 300): string {
   return buildUrl('/rest/getCoverArt.view', { id, size: String(size) });
 }
 
+export async function getPlaylists(): Promise<Playlist[]> {
+  await getConfig();
+  const url = buildUrl('/rest/getPlaylists.view');
+  const res = await fetch(url);
+  const data = await res.json();
+  const list = data?.['subsonic-response']?.playlists?.playlist;
+  return (list ?? []).map(mapPlaylist);
+}
+
+export async function getPlaylist(id: string): Promise<PlaylistWithSongs> {
+  await getConfig();
+  const url = buildUrl('/rest/getPlaylist.view', { id });
+  const res = await fetch(url);
+  const data = await res.json();
+  const raw = data?.['subsonic-response']?.playlist;
+  return {
+    ...mapPlaylist(raw),
+    entry: (raw?.entry ?? []).map(mapSong),
+  };
+}
+
+export async function createPlaylist(name: string, songIds?: string[]): Promise<string> {
+  await getConfig();
+  const params: Record<string, string> = { name };
+  const url = buildUrl('/rest/createPlaylist.view', params);
+  // songId params must be repeated, not comma-joined
+  const songParams = songIds ? songIds.map((id) => `&songId=${encodeURIComponent(id)}`).join('') : '';
+  const res = await fetch(url + songParams);
+  const data = await res.json();
+  return data?.['subsonic-response']?.playlist?.id ?? '';
+}
+
+export async function updatePlaylist(
+  playlistId: string,
+  songIdsToAdd: string[],
+  songIndexesToRemove: number[],
+): Promise<void> {
+  await getConfig();
+  const url = buildUrl('/rest/updatePlaylist.view', { playlistId });
+  const addParams = songIdsToAdd.map((id) => `&songIdToAdd=${encodeURIComponent(id)}`).join('');
+  const removeParams = songIndexesToRemove.map((i) => `&songIndexToRemove=${i}`).join('');
+  await fetch(url + addParams + removeParams);
+}
+
+export async function deletePlaylist(id: string): Promise<void> {
+  await getConfig();
+  const url = buildUrl('/rest/deletePlaylist.view', { id });
+  await fetch(url);
+}
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function mapAlbum(raw: any): Album {
   return {
@@ -111,5 +172,15 @@ function mapSong(raw: any): Song {
     coverArt: raw.coverArt ?? '',
     duration: raw.duration ?? 0,
     track: raw.track ?? 0,
+  };
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function mapPlaylist(raw: any): Playlist {
+  return {
+    id: raw.id,
+    name: raw.name ?? '',
+    songCount: raw.songCount ?? 0,
+    coverArt: raw.coverArt ?? '',
   };
 }
