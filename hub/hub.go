@@ -32,11 +32,11 @@ const (
 	MsgPlaylistChanged    = "PLAYLIST_CHANGED"
 
 	// Outbound
-	MsgStateSync           = "STATE_SYNC"
-	MsgCommand             = "COMMAND"
-	MsgRoleChange          = "ROLE_CHANGE"
-	MsgError               = "ERROR"
-	MsgPlaylistInvalidate  = "PLAYLIST_INVALIDATE"
+	MsgStateSync          = "STATE_SYNC"
+	MsgCommand            = "COMMAND"
+	MsgRoleChange         = "ROLE_CHANGE"
+	MsgError              = "ERROR"
+	MsgPlaylistInvalidate = "PLAYLIST_INVALIDATE"
 )
 
 // Envelope is the wire format for every WebSocket message.
@@ -198,8 +198,9 @@ func (h *Hub) handleRegister(c *Client) {
 	}
 
 	h.clients[c.ID] = c
-	// First client becomes active; subsequent ones are observers.
-	if h.activeClientID == "" || h.activeClientID == c.ID {
+
+	// Assign roles based on active client status.
+	if h.activeClientID == "" {
 		c.Role = "active"
 		h.activeClientID = c.ID
 	} else {
