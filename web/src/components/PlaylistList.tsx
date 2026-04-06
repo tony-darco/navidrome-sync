@@ -1,4 +1,5 @@
-import { getCoverArtUrl, Playlist } from '../api/navidrome';
+import { getCoverArtUrl } from '../api/navidrome';
+import type { Playlist } from '../api/navidrome';
 
 interface PlaylistListProps {
   playlists: Playlist[];

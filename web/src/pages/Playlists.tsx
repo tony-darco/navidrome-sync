@@ -4,7 +4,7 @@ import PlaylistList from '../components/PlaylistList';
 import PlaylistDetail from '../components/PlaylistDetail';
 import PlaylistCreateModal from '../components/PlaylistCreateModal';
 import PlaylistEditSheet from '../components/PlaylistEditSheet';
-import type { Playlist } from '../api/navidrome';
+import type { Playlist } from '../api/navidrome';  // type-only import
 
 export default function Playlists() {
   const { playlists, loading, error, refetch } = usePlaylists();

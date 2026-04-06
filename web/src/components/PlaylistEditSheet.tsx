@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
-import { getPlaylist, updatePlaylist, search, getCoverArtUrl, Song } from '../api/navidrome';
+import { getPlaylist, updatePlaylist, search, getCoverArtUrl } from '../api/navidrome';
+import type { Song } from '../api/navidrome';
 import { useSyncStore } from '../store/syncStore';
 
 interface PlaylistEditSheetProps {

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
-import { getPlaylists, Playlist } from '../api/navidrome';
+import { getPlaylists } from '../api/navidrome';
+import type { Playlist } from '../api/navidrome';
 import { useSyncStore } from '../store/syncStore';
 
 export function usePlaylists() {
