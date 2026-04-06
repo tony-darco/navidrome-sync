@@ -311,7 +311,9 @@ function ObserverView({
   song: NowPlayingSong;
   lastSyncTime: number;
 }) {
-  const playSong = useSyncStore((s) => s.playSong);
+  const isPlaying = useSyncStore((s) => s.isPlaying);
+  const play = useSyncStore((s) => s.play);
+  const pause = useSyncStore((s) => s.pause);
   const prev = useSyncStore((s) => s.prev);
   const next = useSyncStore((s) => s.next);
   const shuffle = useSyncStore((s) => s.shuffle);
@@ -384,11 +386,15 @@ function ObserverView({
           <svg className="w-8 h-8" viewBox="0 0 24 24" fill="currentColor"><path d="M6 6h2v12H6zm3.5 6l8.5 6V6z" /></svg>
         </button>
         <button
-          onClick={() => playSong(song)}
+          onClick={isPlaying ? pause : play}
           className="w-14 h-14 rounded-full bg-white text-black flex items-center justify-center hover:scale-105 transition-transform"
-          aria-label="Play"
+          aria-label={isPlaying ? 'Pause' : 'Play'}
         >
-          <svg className="w-7 h-7 ml-1" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z" /></svg>
+          {isPlaying ? (
+            <svg className="w-7 h-7" viewBox="0 0 24 24" fill="currentColor"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" /></svg>
+          ) : (
+            <svg className="w-7 h-7 ml-1" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z" /></svg>
+          )}
         </button>
         <button
           onClick={() => next()}

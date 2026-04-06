@@ -9,6 +9,7 @@ export interface NowPlayingSong {
   coverArtId: string;
   durationSecs: number;
   positionSecs: number;
+  isPlaying?: boolean;
 }
 
 export interface ConnectedClient {
@@ -83,6 +84,10 @@ interface SyncState {
   showQueue: boolean;
   setShowQueue: (show: boolean) => void;
 
+  // Playlist invalidation
+  lastPlaylistInvalidation: { playlistId: string; action: string } | null;
+  notifyPlaylistChanged: (playlistId: string, action: string) => void;
+
   claim: () => void;
   sendCommand: (type: 'PLAY' | 'PAUSE' | 'NEXT' | 'PREV' | 'SEEK' | 'PLAY_SONG' | 'LOAD_QUEUE' | 'PLAY_INDEX', payload?: Record<string, unknown>) => void;
   sendNowPlaying: (song: NowPlayingSong) => void;
@@ -118,6 +123,7 @@ export const useSyncStore = create<SyncState>((set, get) => ({
   repeatMode: 'off' as RepeatMode,
   showQueue: false,
   sendMessage: null,
+  lastPlaylistInvalidation: null,
 
   setSendMessage: (fn) => set({ sendMessage: fn }),
 
@@ -141,6 +147,10 @@ export const useSyncStore = create<SyncState>((set, get) => ({
     // Accept queue and state from server if we're an observer (or just became active via claim)
     if (newRole === 'observer' || justBecameActive) {
       updates.nowPlaying = payload.song;
+      // Reflect the active client's actual play/pause state for observers.
+      if (newRole === 'observer') {
+        updates.isPlaying = payload.song?.isPlaying ?? false;
+      }
       if (payload.queue) {
         updates.queue = payload.queue.map((q) => ({ ...q, positionSecs: 0 }));
         updates.queueIndex = payload.queueIndex ?? 0;
@@ -418,6 +428,11 @@ export const useSyncStore = create<SyncState>((set, get) => ({
   },
 
   setShowQueue: (show: boolean) => set({ showQueue: show }),
+
+  notifyPlaylistChanged: (playlistId, action) => {
+    get().sendMessage?.('PLAYLIST_CHANGED', { playlistId, action });
+    set({ lastPlaylistInvalidation: { playlistId, action } });
+  },
 
   claim: () => {
     get().sendMessage?.('CLAIM');

@@ -3,6 +3,7 @@ import { useWebSocket } from './hooks/useWebSocket';
 import { useSyncStore } from './store/syncStore';
 import NowPlaying from './pages/NowPlaying';
 import Library from './pages/Library';
+import Playlists from './pages/Playlists';
 import NowPlayingBar from './components/NowPlayingBar';
 import AudioManager from './components/AudioManager';
 
@@ -33,6 +34,14 @@ function AppContent() {
         >
           Library
         </NavLink>
+        <NavLink
+          to="/playlists"
+          className={({ isActive }) =>
+            `text-sm px-3 py-1 rounded ${isActive ? 'bg-zinc-800 text-white' : 'text-zinc-400 hover:text-zinc-200'}`
+          }
+        >
+          Playlists
+        </NavLink>
         <div className="ml-auto flex items-center gap-2">
           <span
             className={`w-2 h-2 rounded-full ${isConnected ? 'bg-blue-500' : 'bg-red-500'}`}
@@ -47,6 +56,7 @@ function AppContent() {
         <Routes>
           <Route path="/" element={<NowPlaying />} />
           <Route path="/library" element={<Library />} />
+          <Route path="/playlists" element={<Playlists />} />
         </Routes>
       </main>
 
