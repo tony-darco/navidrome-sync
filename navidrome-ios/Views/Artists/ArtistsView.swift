@@ -62,8 +62,3 @@ struct ArtistsView: View {
         }
     }
 }
-
-extension ArtistID3: Hashable {
-    static func == (lhs: ArtistID3, rhs: ArtistID3) -> Bool { lhs.id == rhs.id }
-    func hash(into hasher: inout Hasher) { hasher.combine(id) }
-}

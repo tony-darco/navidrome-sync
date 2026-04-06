@@ -9,7 +9,7 @@ struct AlphabetScrubber: View {
             ForEach(letters, id: \.self) { letter in
                 Text(letter)
                     .font(.system(size: 10, weight: .medium))
-                    .foregroundStyle(selectedLetter == letter ? .accent : .secondary)
+                    .foregroundStyle(selectedLetter == letter ? Color.accentColor : .secondary)
                     .onTapGesture {
                         selectedLetter = letter
                     }

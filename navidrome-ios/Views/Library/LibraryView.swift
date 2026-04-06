@@ -12,6 +12,11 @@ struct LibraryView: View {
         ("music.note", "Songs"),
     ]
 
+    private let columns = [
+        GridItem(.flexible(), spacing: 16),
+        GridItem(.flexible(), spacing: 16),
+    ]
+
     var body: some View {
         NavigationStack {
             ScrollView {
@@ -20,18 +25,18 @@ struct LibraryView: View {
                     VStack(spacing: 0) {
                         ForEach(libraryRows, id: \.title) { row in
                             NavigationLink(value: row.title) {
-                                HStack(spacing: 12) {
+                                HStack {
                                     Image(systemName: row.icon)
-                                        .foregroundStyle(.accent)
-                                        .frame(width: 24)
+                                        .foregroundColor(.blue)
+                                        .frame(width: 28, height: 28)
                                     Text(row.title)
-                                        .font(.body)
+                                        .foregroundColor(.primary)
                                     Spacer()
                                     Image(systemName: "chevron.right")
-                                        .font(.caption)
-                                        .foregroundStyle(.tertiary)
+                                        .foregroundColor(.secondary)
+                                        .font(.footnote)
                                 }
-                                .padding(.vertical, 12)
+                                .padding(.vertical, 10)
                                 .padding(.horizontal, 16)
                                 .contentShape(Rectangle())
                             }
@@ -41,7 +46,7 @@ struct LibraryView: View {
                             }
                         }
                     }
-                    .background(Color(.secondarySystemGroupedBackground))
+                    .background(Color(.systemGray6))
                     .clipShape(RoundedRectangle(cornerRadius: 10))
                     .padding(.horizontal)
                     .padding(.top, 8)
@@ -49,41 +54,43 @@ struct LibraryView: View {
                     // Recently Added
                     if !recentAlbums.isEmpty {
                         Text("Recently Added")
-                            .font(.title3)
+                            .font(.title2)
                             .fontWeight(.bold)
-                            .padding(.horizontal)
+                            .foregroundColor(.primary)
+                            .padding(.horizontal, 16)
                             .padding(.top, 24)
                             .padding(.bottom, 8)
 
-                        ScrollView(.horizontal, showsIndicators: false) {
-                            LazyHStack(spacing: 12) {
-                                ForEach(recentAlbums) { album in
-                                    NavigationLink(value: album) {
-                                        VStack(alignment: .leading, spacing: 4) {
-                                            CoverArtImage(id: album.coverArt, size: 300)
-                                                .frame(width: 140, height: 140)
-                                                .clipShape(RoundedRectangle(cornerRadius: 8))
-                                            Text(album.name)
-                                                .font(.caption)
-                                                .fontWeight(.medium)
-                                                .lineLimit(1)
-                                            Text(album.artist)
-                                                .font(.caption2)
-                                                .foregroundStyle(.secondary)
-                                                .lineLimit(1)
-                                        }
-                                        .frame(width: 140)
+                        LazyVGrid(columns: columns, spacing: 16) {
+                            ForEach(recentAlbums) { album in
+                                NavigationLink(value: album) {
+                                    VStack(alignment: .leading, spacing: 4) {
+                                        CoverArtImage(id: album.coverArt, size: 300)
+                                            .aspectRatio(1, contentMode: .fit)
+                                            .clipShape(RoundedRectangle(cornerRadius: 8))
+
+                                        Text(album.name)
+                                            .font(.caption)
+                                            .fontWeight(.medium)
+                                            .foregroundColor(.primary)
+                                            .lineLimit(1)
+
+                                        Text(album.artist)
+                                            .font(.caption2)
+                                            .foregroundColor(.secondary)
+                                            .lineLimit(1)
                                     }
-                                    .buttonStyle(.plain)
                                 }
+                                .buttonStyle(.plain)
                             }
-                            .padding(.horizontal)
                         }
+                        .padding(.horizontal, 16)
                     }
                 }
             }
-            .background(Color(.systemGroupedBackground))
+            .background(Color.black)
             .navigationTitle("Library")
+            .navigationBarTitleDisplayMode(.large)
             .navigationDestination(for: String.self) { destination in
                 switch destination {
                 case "Playlists": PlaylistsView()
