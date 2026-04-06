@@ -137,24 +137,26 @@ func TestCommandForwarding(t *testing.T) {
 	connA, recvA := connectWS(t, ts.URL)
 	defer connA.Close()
 	connA.WriteJSON(hub.Envelope{Type: hub.MsgRegister, ClientID: "clientA"})
-	readEnv(t, recvA)
+	readEnv(t, recvA) // STATE_SYNC from onRegisterMsg
 
 	connB, recvB := connectWS(t, ts.URL)
 	defer connB.Close()
 	connB.WriteJSON(hub.Envelope{Type: hub.MsgRegister, ClientID: "clientB"})
-	readEnv(t, recvB)
-	readEnv(t, recvA)
+	readEnv(t, recvB) // STATE_SYNC from onRegisterMsg
+	readEnv(t, recvA) // STATE_SYNC broadcast to A when B registers
 
+	// Observer B sends PLAY — hub forwards it to active client A.
 	connB.WriteJSON(hub.Envelope{Type: hub.MsgPlay})
-	errResp := readEnv(t, recvB)
-	if errResp.Type != hub.MsgError {
-		t.Fatal(errResp.Type)
+	msgCmdFromB := readEnv(t, recvA)
+	if msgCmdFromB.Type != hub.MsgCommand {
+		t.Fatal(msgCmdFromB.Type)
 	}
 
+	// Active A sends PLAY — hub forwards it back to A itself.
 	connA.WriteJSON(hub.Envelope{Type: hub.MsgPlay})
-	msgCmdA := readEnv(t, recvA)
-	if msgCmdA.Type != hub.MsgCommand {
-		t.Fatal(msgCmdA.Type)
+	msgCmdFromA := readEnv(t, recvA)
+	if msgCmdFromA.Type != hub.MsgCommand {
+		t.Fatal(msgCmdFromA.Type)
 	}
 }
 

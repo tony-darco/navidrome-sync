@@ -29,12 +29,14 @@ const (
 	MsgLoadQueue          = "LOAD_QUEUE"
 	MsgSetQueue           = "SET_QUEUE"
 	MsgSetPlaybackOptions = "SET_PLAYBACK_OPTIONS"
+	MsgPlaylistChanged    = "PLAYLIST_CHANGED"
 
 	// Outbound
-	MsgStateSync  = "STATE_SYNC"
-	MsgCommand    = "COMMAND"
-	MsgRoleChange = "ROLE_CHANGE"
-	MsgError      = "ERROR"
+	MsgStateSync           = "STATE_SYNC"
+	MsgCommand             = "COMMAND"
+	MsgRoleChange          = "ROLE_CHANGE"
+	MsgError               = "ERROR"
+	MsgPlaylistInvalidate  = "PLAYLIST_INVALIDATE"
 )
 
 // Envelope is the wire format for every WebSocket message.
@@ -54,6 +56,7 @@ type NowPlayingState struct {
 	CoverArtID   string  `json:"coverArtId,omitempty"`
 	DurationSecs int     `json:"durationSecs,omitempty"`
 	PositionSecs float64 `json:"positionSecs"`
+	IsPlaying    bool    `json:"isPlaying"`
 }
 
 // clientInfo is the per-client summary included in STATE_SYNC broadcasts.
@@ -135,6 +138,12 @@ func (h *Hub) UpdateFromPoll(entry *navidrome.NowPlayingEntry) {
 	if entry == nil {
 		h.state = nil
 	} else {
+		// Preserve the existing play/pause state across poll updates so that a
+		// metadata refresh doesn't flip observers back to "paused".
+		isPlaying := false
+		if h.state != nil {
+			isPlaying = h.state.IsPlaying
+		}
 		h.state = &NowPlayingState{
 			SongID:       entry.SongID,
 			Title:        entry.Title,
@@ -142,6 +151,7 @@ func (h *Hub) UpdateFromPoll(entry *navidrome.NowPlayingEntry) {
 			Album:        entry.Album,
 			CoverArtID:   entry.CoverArtID,
 			DurationSecs: entry.DurationSecs,
+			IsPlaying:    isPlaying,
 		}
 	}
 	h.mu.Unlock()
@@ -247,6 +257,8 @@ func (h *Hub) handleMessage(msg inboundMessage) {
 		h.onSetPlaybackOptions(msg)
 	case MsgPlay, MsgPause, MsgNext, MsgPrev, MsgSeek, MsgPlaySong, MsgLoadQueue:
 		h.onTransportCommand(msg)
+	case MsgPlaylistChanged:
+		h.onPlaylistChanged(msg)
 	default:
 		msg.client.sendError("UNKNOWN_TYPE", "unrecognized message type: "+msg.envelope.Type)
 	}
@@ -298,6 +310,7 @@ func (h *Hub) onNowPlaying(msg inboundMessage) {
 		return
 	}
 
+	np.IsPlaying = true
 	h.mu.Lock()
 	h.state = &np
 	h.mu.Unlock()
@@ -400,6 +413,31 @@ func (h *Hub) onTransportCommand(msg inboundMessage) {
 		Type:    MsgCommand,
 		Payload: payload,
 	})
+
+	// Track play/pause state so observers always reflect the true playback state.
+	// Only broadcast when state actually changes (i.e. a song is loaded).
+	switch msg.envelope.Type {
+	case MsgPlay:
+		h.mu.Lock()
+		changed := h.state != nil && !h.state.IsPlaying
+		if changed {
+			h.state.IsPlaying = true
+		}
+		h.mu.Unlock()
+		if changed {
+			h.broadcastStateSync()
+		}
+	case MsgPause:
+		h.mu.Lock()
+		changed := h.state != nil && h.state.IsPlaying
+		if changed {
+			h.state.IsPlaying = false
+		}
+		h.mu.Unlock()
+		if changed {
+			h.broadcastStateSync()
+		}
+	}
 }
 
 // onSetQueue stores the playback queue sent by the active client.
@@ -506,6 +544,26 @@ func (h *Hub) sendStateSyncTo(c *Client) {
 	h.mu.RUnlock()
 
 	c.sendJSON(Envelope{Type: MsgStateSync, Payload: payload})
+}
+
+// onPlaylistChanged receives PLAYLIST_CHANGED from one client and re-broadcasts
+// it as PLAYLIST_INVALIDATE to all other connected clients.
+func (h *Hub) onPlaylistChanged(msg inboundMessage) {
+	h.mu.RLock()
+	clients := make([]*Client, 0, len(h.clients))
+	for _, c := range h.clients {
+		if c.ID != msg.client.ID {
+			clients = append(clients, c)
+		}
+	}
+	h.mu.RUnlock()
+
+	env := Envelope{Type: MsgPlaylistInvalidate, Payload: msg.envelope.Payload}
+	for _, c := range clients {
+		c.sendJSON(env)
+	}
+
+	log.Printf("playlist changed client=%s, notified %d other client(s)", msg.client.ID, len(clients))
 }
 
 // parsePayloadMap is a small helper to coerce the Payload (which arrives as
