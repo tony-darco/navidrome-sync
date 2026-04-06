@@ -165,22 +165,28 @@ export const useSyncStore = create<SyncState>((set, get) => ({
     
     set(updates);
 
-    // Auto-play when we just became active and there's a song.
-    // If audio is already playing the same song (started in claim()), just
-    // sync the position from the server's authoritative value and skip reload.
+    // When we just became active and there's a song, load it.
+    // Only auto-play if the hub says the song was actually playing.
     if (justBecameActive && payload.song) {
       const song = payload.song;
+      const shouldPlay = song.isPlaying;
       if (!audio.paused && audio.src.includes(song.songId)) {
         if (Math.abs(audio.currentTime - song.positionSecs) > 2) {
           audio.currentTime = song.positionSecs;
+        }
+        if (!shouldPlay) {
+          audio.pause();
         }
       } else {
         audio.src = streamUrl(song.songId);
         if (song.positionSecs > 0) {
           audio.currentTime = song.positionSecs;
         }
-        audio.play().catch(() => {});
+        if (shouldPlay) {
+          audio.play().catch(() => {});
+        }
       }
+      set({ isPlaying: shouldPlay });
     }
   },
 
