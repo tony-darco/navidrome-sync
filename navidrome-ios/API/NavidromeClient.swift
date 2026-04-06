@@ -1,4 +1,5 @@
 import Foundation
+import UIKit
 
 /// Handles all Subsonic API calls directly against the Navidrome server.
 actor NavidromeClient {
@@ -184,7 +185,14 @@ actor NavidromeClient {
     }
 
     nonisolated func coverArtURL(id: String, size: Int = 300) -> URL? {
-        try? buildMediaURL(path: "/rest/getCoverArt.view", params: ["id": id, "size": String(size)])
+        guard !id.isEmpty else { return nil }
+        return try? buildMediaURL(path: "/rest/getCoverArt.view", params: ["id": id, "size": String(size)])
+    }
+
+    func fetchCoverArt(id: String, size: Int = 300) async -> UIImage? {
+        guard !id.isEmpty, let url = coverArtURL(id: id, size: size) else { return nil }
+        guard let (data, _) = try? await session.data(from: url) else { return nil }
+        return UIImage(data: data)
     }
 
     /// URL builder for media endpoints — nonisolated since it only reads AppConfig.

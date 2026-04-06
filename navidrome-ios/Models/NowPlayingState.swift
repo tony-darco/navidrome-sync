@@ -9,6 +9,7 @@ nonisolated struct NowPlayingSong: Codable, Equatable, Sendable {
     let coverArtId: String
     let durationSecs: Int
     var positionSecs: Double
+    var isPlaying: Bool?
 }
 
 /// Per-client summary included in STATE_SYNC broadcasts.

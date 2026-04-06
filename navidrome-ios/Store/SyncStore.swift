@@ -320,6 +320,17 @@ final class SyncStore: ObservableObject {
         guard let url = NavidromeClient.shared.streamURL(songId: song.songId) else { return }
         audioPlayer.play(url: url, position: song.positionSecs)
         updateLockScreen(song: song)
+        Task {
+            let artwork = await NavidromeClient.shared.fetchCoverArt(id: song.coverArtId)
+            audioPlayer.updateNowPlayingInfo(
+                title: song.title,
+                artist: song.artist,
+                album: song.album,
+                duration: Double(song.durationSecs),
+                position: song.positionSecs,
+                artwork: artwork
+            )
+        }
     }
 
     private func updateLockScreen(song: NowPlayingSong) {
@@ -485,9 +496,14 @@ final class SyncStore: ObservableObject {
                 }
             }
             
-            // Auto-play when we just became active and there's a song
+            // Only auto-play if the hub says the song was actually playing
             if justBecameActive {
-                loadAndPlay(song)
+                if song.isPlaying == true {
+                    loadAndPlay(song)
+                } else {
+                    // Load the song metadata but don't start playback
+                    position = song.positionSecs
+                }
             }
         } else {
             if myRole == "observer" || justBecameActive {
