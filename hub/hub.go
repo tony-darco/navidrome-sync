@@ -30,6 +30,7 @@ const (
 	MsgSetQueue           = "SET_QUEUE"
 	MsgSetPlaybackOptions = "SET_PLAYBACK_OPTIONS"
 	MsgPlaylistChanged    = "PLAYLIST_CHANGED"
+	MsgStarChanged        = "STAR_CHANGED"
 
 	// Outbound
 	MsgStateSync          = "STATE_SYNC"
@@ -37,6 +38,7 @@ const (
 	MsgRoleChange         = "ROLE_CHANGE"
 	MsgError              = "ERROR"
 	MsgPlaylistInvalidate = "PLAYLIST_INVALIDATE"
+	MsgStarNotify         = "STAR_NOTIFY"
 )
 
 // Envelope is the wire format for every WebSocket message.
@@ -287,6 +289,8 @@ func (h *Hub) handleMessage(msg inboundMessage) {
 		h.onTransportCommand(msg)
 	case MsgPlaylistChanged:
 		h.onPlaylistChanged(msg)
+	case MsgStarChanged:
+		h.onStarChanged(msg)
 	default:
 		msg.client.sendError("UNKNOWN_TYPE", "unrecognized message type: "+msg.envelope.Type)
 	}
@@ -592,6 +596,26 @@ func (h *Hub) onPlaylistChanged(msg inboundMessage) {
 	}
 
 	log.Printf("playlist changed client=%s, notified %d other client(s)", msg.client.ID, len(clients))
+}
+
+// onStarChanged receives STAR_CHANGED from one client and re-broadcasts
+// it as STAR_NOTIFY to all other connected clients.
+func (h *Hub) onStarChanged(msg inboundMessage) {
+	h.mu.RLock()
+	clients := make([]*Client, 0, len(h.clients))
+	for _, c := range h.clients {
+		if c.ID != msg.client.ID {
+			clients = append(clients, c)
+		}
+	}
+	h.mu.RUnlock()
+
+	env := Envelope{Type: MsgStarNotify, Payload: msg.envelope.Payload}
+	for _, c := range clients {
+		c.sendJSON(env)
+	}
+
+	log.Printf("star changed client=%s, notified %d other client(s)", msg.client.ID, len(clients))
 }
 
 // parsePayloadMap is a small helper to coerce the Payload (which arrives as
