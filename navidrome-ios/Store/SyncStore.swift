@@ -1,5 +1,6 @@
 import Combine
 import Foundation
+import SwiftUI
 import UIKit
 
 /// Single source of truth for the entire app.
@@ -26,6 +27,12 @@ final class SyncStore: ObservableObject {
 
     @Published var lastPlaylistInvalidation: PlaylistInvalidation? = nil
 
+    /// Dominant color extracted from the current album art.
+    @Published var dominantColor: Color = .clear
+    /// Darkened version of dominantColor safe for backgrounds with white text.
+    @Published var dominantBackgroundColor: Color = .black
+    private var lastDominantCoverArtId: String = ""
+
     /// Stores the original (unshuffled) queue order.
     private var originalQueue: [NowPlayingSong] = []
 
@@ -36,6 +43,7 @@ final class SyncStore: ObservableObject {
     private var positionReportingTask: Task<Void, Never>?
     private var cancellables = Set<AnyCancellable>()
     private var interpolationTask: Task<Void, Never>?
+    private var scrobbledSongId: String?
 
     // MARK: - Init
 
@@ -78,18 +86,43 @@ final class SyncStore: ObservableObject {
 
         // WebSocket message handler
         syncClient.onMessage = { [weak self] envelope in
+            guard let self else { return }
             Task { @MainActor in
-                self?.handleMessage(envelope)
+                self.handleMessage(envelope)
             }
         }
         syncClient.onConnected = { [weak self] in
-            Task { @MainActor in self?.isConnected = true }
+            guard let self else { return }
+            Task { @MainActor in self.isConnected = true }
         }
         syncClient.onDisconnected = { [weak self] in
-            Task { @MainActor in self?.isConnected = false }
+            guard let self else { return }
+            Task { @MainActor in self.isConnected = false }
         }
 
+        // Update dominant color when now playing changes
+        $nowPlaying
+            .compactMap { $0?.coverArtId }
+            .removeDuplicates()
+            .sink { [weak self] coverArtId in
+                Task { @MainActor in
+                    self?.extractDominantColor(from: coverArtId)
+                }
+            }
+            .store(in: &cancellables)
+    }
 
+    private func extractDominantColor(from coverArtId: String) {
+        guard !coverArtId.isEmpty, coverArtId != lastDominantCoverArtId else { return }
+        lastDominantCoverArtId = coverArtId
+        Task {
+            if let image = await ImageCache.shared.image(for: coverArtId, size: 50) {
+                withAnimation(.easeInOut(duration: 0.5)) {
+                    self.dominantColor = image.dominantColor()
+                    self.dominantBackgroundColor = self.dominantColor.darkened(by: 0.4)
+                }
+            }
+        }
     }
 
     // MARK: - Connection
@@ -289,6 +322,23 @@ final class SyncStore: ObservableObject {
         lastPlaylistInvalidation = PlaylistInvalidation(playlistId: playlistId, action: action)
     }
 
+    func toggleStar() {
+        guard let song = nowPlaying else { return }
+        let newStarred = !(song.starred ?? false)
+        nowPlaying?.starred = newStarred
+        let songId = song.songId
+        Task {
+            if newStarred {
+                try? await NavidromeClient.shared.star(id: songId)
+            } else {
+                try? await NavidromeClient.shared.unstar(id: songId)
+            }
+        }
+        if isConnected {
+            sendMessage(type: .starChanged, payload: StarChangedPayload(songId: songId, starred: newStarred))
+        }
+    }
+
     func clearQueue() {
         // Keep only the currently playing song
         if queueIndex < queue.count {
@@ -301,6 +351,11 @@ final class SyncStore: ObservableObject {
 
     /// Called when a track finishes playing.
     private func handleTrackEnd() {
+        // Scrobble if not yet done (covers short songs or seeks past 50%)
+        if let song = nowPlaying, scrobbledSongId != song.songId {
+            scrobbledSongId = song.songId
+            Task { try? await NavidromeClient.shared.scrobble(songId: song.songId) }
+        }
         switch repeatMode {
         case .one:
             // Replay the same track
@@ -327,6 +382,7 @@ final class SyncStore: ObservableObject {
 
     private func loadAndPlay(_ song: NowPlayingSong) {
         nowPlaying = song
+        scrobbledSongId = nil
         guard let url = NavidromeClient.shared.streamURL(songId: song.songId) else { return }
         audioPlayer.play(url: url, position: song.positionSecs)
         updateLockScreen(song: song)
@@ -408,6 +464,14 @@ final class SyncStore: ObservableObject {
                     type: .positionUpdate,
                     payload: PositionUpdatePayload(positionSecs: audioPlayer.currentTime)
                 )
+                // Scrobble at 50% of song duration
+                if let song = nowPlaying,
+                   scrobbledSongId != song.songId,
+                   song.durationSecs > 0,
+                   audioPlayer.currentTime >= Double(song.durationSecs) / 2.0 {
+                    scrobbledSongId = song.songId
+                    Task { try? await NavidromeClient.shared.scrobble(songId: song.songId) }
+                }
             }
         }
     }
@@ -451,6 +515,12 @@ final class SyncStore: ObservableObject {
                     playlistId: payload.playlistId,
                     action: payload.action
                 )
+            }
+        case .starNotify:
+            if let payload = envelope.payload?.decode(StarChangedPayload.self) {
+                if nowPlaying?.songId == payload.songId {
+                    nowPlaying?.starred = payload.starred
+                }
             }
         case .error:
             if let payload = envelope.payload?.decode(ErrorPayload.self) {
@@ -561,7 +631,7 @@ final class SyncStore: ObservableObject {
                     album: songPayload.album,
                     coverArtId: songPayload.coverArtId,
                     durationSecs: songPayload.durationSecs,
-                    positionSecs: songPayload.positionSecs ?? 0.0
+                    positionSecs: songPayload.positionSecs
                 )
                 playSong(song, isCommand: true)
             }
