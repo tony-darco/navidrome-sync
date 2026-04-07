@@ -5,3 +5,10 @@ web/node_modules/
 web/dist/
 *log*
 *out*
+generate_icons.js
+generate_icons.py
+favicon*.png
+apple-touch-icon.png
+static/favicon*.png
+web/public/favicon*.png
+web/public/apple-touch-icon.png
