@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { streamUrl } from '../api/navidrome';
+import { streamUrl, scrobble as apiScrobble, star as apiStar, unstar as apiUnstar } from '../api/navidrome';
 
 export interface NowPlayingSong {
   songId: string;
@@ -10,6 +10,7 @@ export interface NowPlayingSong {
   durationSecs: number;
   positionSecs: number;
   isPlaying?: boolean;
+  starred?: boolean;
 }
 
 export interface ConnectedClient {
@@ -85,11 +86,15 @@ interface SyncState {
   showQueue: boolean;
   setShowQueue: (show: boolean) => void;
 
+  // Scrobble tracking
+  scrobbledSongId: string | null;
+
   // Playlist invalidation
   lastPlaylistInvalidation: { playlistId: string; action: string } | null;
   notifyPlaylistChanged: (playlistId: string, action: string) => void;
 
   claim: () => void;
+  toggleStar: () => void;
   sendCommand: (type: 'PLAY' | 'PAUSE' | 'NEXT' | 'PREV' | 'SEEK' | 'PLAY_SONG' | 'LOAD_QUEUE' | 'PLAY_INDEX', payload?: Record<string, unknown>) => void;
   sendNowPlaying: (song: NowPlayingSong) => void;
   sendPositionUpdate: (positionSecs: number) => void;
@@ -125,6 +130,7 @@ export const useSyncStore = create<SyncState>((set, get) => ({
   showQueue: false,
   sendMessage: null,
   lastPlaylistInvalidation: null,
+  scrobbledSongId: null,
 
   setSendMessage: (fn) => set({ sendMessage: fn }),
 
@@ -252,7 +258,7 @@ export const useSyncStore = create<SyncState>((set, get) => ({
       get().sendCommand('PLAY_SONG', { song });
       return;
     }
-    set({ queue: [song], queueIndex: 0, nowPlaying: song });
+    set({ queue: [song], queueIndex: 0, nowPlaying: song, scrobbledSongId: null });
     audio.src = streamUrl(song.songId);
     audio.play().catch(() => {});
     if (song.positionSecs > 0) {
@@ -270,7 +276,7 @@ export const useSyncStore = create<SyncState>((set, get) => ({
       get().sendCommand('LOAD_QUEUE', { queue, startIndex });
       return;
     }
-    set({ queue, queueIndex: startIndex, nowPlaying: song });
+    set({ queue, queueIndex: startIndex, nowPlaying: song, scrobbledSongId: null });
     audio.src = streamUrl(song.songId);
     audio.play().catch(() => {});
     sendQueue(queue, startIndex);
@@ -343,7 +349,7 @@ export const useSyncStore = create<SyncState>((set, get) => ({
     }
 
     const song = queue[nextIndex];
-    set({ queueIndex: nextIndex, nowPlaying: song });
+    set({ queueIndex: nextIndex, nowPlaying: song, scrobbledSongId: null });
     audio.src = streamUrl(song.songId);
     audio.play().catch(() => {});
     sendNowPlaying(song);
@@ -371,7 +377,7 @@ export const useSyncStore = create<SyncState>((set, get) => ({
       }
     }
     const song = queue[prevIndex];
-    set({ queueIndex: prevIndex, nowPlaying: song });
+    set({ queueIndex: prevIndex, nowPlaying: song, scrobbledSongId: null });
     audio.src = streamUrl(song.songId);
     audio.play().catch(() => {});
     sendNowPlaying(song);
@@ -427,7 +433,7 @@ export const useSyncStore = create<SyncState>((set, get) => ({
       get().sendCommand('PLAY_INDEX', { queueIndex: index });
       return;
     }
-    set({ queueIndex: index, nowPlaying: song });
+    set({ queueIndex: index, nowPlaying: song, scrobbledSongId: null });
     audio.src = streamUrl(song.songId);
     audio.play().catch(() => {});
     sendNowPlaying(song);
@@ -452,6 +458,19 @@ export const useSyncStore = create<SyncState>((set, get) => ({
   notifyPlaylistChanged: (playlistId, action) => {
     get().sendMessage?.('PLAYLIST_CHANGED', { playlistId, action });
     set({ lastPlaylistInvalidation: { playlistId, action } });
+  },
+
+  toggleStar: () => {
+    const { nowPlaying, sendMessage: send } = get();
+    if (!nowPlaying) return;
+    const newStarred = !(nowPlaying.starred ?? false);
+    set({ nowPlaying: { ...nowPlaying, starred: newStarred } });
+    if (newStarred) {
+      apiStar(nowPlaying.songId).catch(() => {});
+    } else {
+      apiUnstar(nowPlaying.songId).catch(() => {});
+    }
+    send?.('STAR_CHANGED', { songId: nowPlaying.songId, starred: newStarred });
   },
 
   claim: () => {
@@ -515,5 +534,11 @@ audio.addEventListener('timeupdate', () => {
   useSyncStore.setState({ position: audio.currentTime });
 });
 audio.addEventListener('ended', () => {
+  // Scrobble on track end if not yet scrobbled
+  const { nowPlaying, scrobbledSongId } = useSyncStore.getState();
+  if (nowPlaying && scrobbledSongId !== nowPlaying.songId) {
+    useSyncStore.setState({ scrobbledSongId: nowPlaying.songId });
+    apiScrobble(nowPlaying.songId).catch(() => {});
+  }
   useSyncStore.getState().next();
 });
