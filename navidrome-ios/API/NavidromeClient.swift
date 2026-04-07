@@ -178,6 +178,23 @@ actor NavidromeClient {
         let (_, _) = try await session.data(from: url)
     }
 
+    // MARK: - Media Annotation APIs
+
+    func star(id: String) async throws {
+        let url = try buildURL(path: "/rest/star.view", params: ["id": id])
+        let (_, _) = try await session.data(from: url)
+    }
+
+    func unstar(id: String) async throws {
+        let url = try buildURL(path: "/rest/unstar.view", params: ["id": id])
+        let (_, _) = try await session.data(from: url)
+    }
+
+    func scrobble(songId: String) async throws {
+        let url = try buildURL(path: "/rest/scrobble.view", params: ["id": songId])
+        let (_, _) = try await session.data(from: url)
+    }
+
     // MARK: - Media URLs (nonisolated — only reads AppConfig statics)
 
     nonisolated func streamURL(songId: String) -> URL? {

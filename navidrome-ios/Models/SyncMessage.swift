@@ -18,6 +18,7 @@ nonisolated enum MessageType: String, Codable, Sendable {
     case setQueue = "SET_QUEUE"
     case setPlaybackOptions = "SET_PLAYBACK_OPTIONS"
     case playlistChanged = "PLAYLIST_CHANGED"
+    case starChanged = "STAR_CHANGED"
 
     // Outbound (server → client)
     case stateSync = "STATE_SYNC"
@@ -25,6 +26,7 @@ nonisolated enum MessageType: String, Codable, Sendable {
     case roleChange = "ROLE_CHANGE"
     case error = "ERROR"
     case playlistInvalidate = "PLAYLIST_INVALIDATE"
+    case starNotify = "STAR_NOTIFY"
 }
 
 // MARK: - Envelope
@@ -111,6 +113,11 @@ nonisolated struct PlaylistInvalidation: Equatable, Sendable {
     let action: String
 }
 
+nonisolated struct StarChangedPayload: Codable, Sendable {
+    let songId: String
+    let starred: Bool
+}
+
 nonisolated struct QueueItemPayload: Codable, Sendable {
     let songId: String
     let title: String
@@ -127,7 +134,8 @@ nonisolated struct QueueItemPayload: Codable, Sendable {
             album: album,
             coverArtId: coverArtId,
             durationSecs: durationSecs,
-            positionSecs: 0
+            positionSecs: 0,
+            starred: nil
         )
     }
 }

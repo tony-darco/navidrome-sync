@@ -9,6 +9,9 @@ nonisolated struct Album: Codable, Identifiable, Sendable {
     let coverArt: String
     let songCount: Int
     let year: Int?
+    let starred: String?
+
+    var isStarred: Bool { starred != nil }
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -22,10 +25,11 @@ nonisolated struct Album: Codable, Identifiable, Sendable {
         coverArt = (try? c.decode(String.self, forKey: .coverArt)) ?? ""
         songCount = (try? c.decode(Int.self, forKey: .songCount)) ?? 0
         year = try? c.decode(Int.self, forKey: .year)
+        starred = try? c.decode(String.self, forKey: .starred)
     }
 
     private enum CodingKeys: String, CodingKey {
-        case id, name, title, artist, albumArtist, coverArt, songCount, year
+        case id, name, title, artist, albumArtist, coverArt, songCount, year, starred
     }
 
     func encode(to encoder: Encoder) throws {
@@ -36,15 +40,17 @@ nonisolated struct Album: Codable, Identifiable, Sendable {
         try c.encode(coverArt, forKey: .coverArt)
         try c.encode(songCount, forKey: .songCount)
         try c.encodeIfPresent(year, forKey: .year)
+        try c.encodeIfPresent(starred, forKey: .starred)
     }
 
-    init(id: String, name: String, artist: String, coverArt: String, songCount: Int, year: Int?) {
+    init(id: String, name: String, artist: String, coverArt: String, songCount: Int, year: Int?, starred: String? = nil) {
         self.id = id
         self.name = name
         self.artist = artist
         self.coverArt = coverArt
         self.songCount = songCount
         self.year = year
+        self.starred = starred
     }
 }
 
@@ -59,9 +65,12 @@ nonisolated struct Song: Codable, Identifiable, Sendable {
     let coverArt: String
     let duration: Int
     let track: Int
+    let starred: String?
+
+    var isStarred: Bool { starred != nil }
 
     private enum CodingKeys: String, CodingKey {
-        case id, title, artist, album, albumId, coverArt, duration, track
+        case id, title, artist, album, albumId, coverArt, duration, track, starred
     }
 
     init(from decoder: Decoder) throws {
@@ -74,9 +83,10 @@ nonisolated struct Song: Codable, Identifiable, Sendable {
         coverArt = (try? c.decode(String.self, forKey: .coverArt)) ?? ""
         duration = (try? c.decode(Int.self, forKey: .duration)) ?? 0
         track = (try? c.decode(Int.self, forKey: .track)) ?? 0
+        starred = try? c.decode(String.self, forKey: .starred)
     }
 
-    init(id: String, title: String, artist: String, album: String, albumId: String, coverArt: String, duration: Int, track: Int) {
+    init(id: String, title: String, artist: String, album: String, albumId: String, coverArt: String, duration: Int, track: Int, starred: String? = nil) {
         self.id = id
         self.title = title
         self.artist = artist
@@ -85,6 +95,7 @@ nonisolated struct Song: Codable, Identifiable, Sendable {
         self.coverArt = coverArt
         self.duration = duration
         self.track = track
+        self.starred = starred
     }
 
     /// Convert to NowPlayingSong for playback.
@@ -96,7 +107,8 @@ nonisolated struct Song: Codable, Identifiable, Sendable {
             album: album,
             coverArtId: coverArt,
             durationSecs: duration,
-            positionSecs: 0
+            positionSecs: 0,
+            starred: isStarred
         )
     }
 }
@@ -142,7 +154,8 @@ nonisolated struct AlbumWithSongs: Decodable, Sendable {
             artist: artist ?? "",
             coverArt: coverArt ?? "",
             songCount: songCount ?? 0,
-            year: year
+            year: year,
+            starred: nil
         )
     }
 }

@@ -10,6 +10,7 @@ nonisolated struct NowPlayingSong: Codable, Equatable, Sendable {
     let durationSecs: Int
     var positionSecs: Double
     var isPlaying: Bool?
+    var starred: Bool? = nil
 }
 
 /// Per-client summary included in STATE_SYNC broadcasts.

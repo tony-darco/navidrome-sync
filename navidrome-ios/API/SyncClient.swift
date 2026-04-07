@@ -134,7 +134,7 @@ nonisolated final class SyncClient: @unchecked Sendable {
 // MARK: - Data → JSON helper
 
 private extension Data {
-    func jsonValue() throws -> JSON {
+    nonisolated func jsonValue() throws -> JSON {
         try JSONDecoder().decode(JSON.self, from: self)
     }
 }
