@@ -46,6 +46,13 @@ export function useWebSocket() {
             case 'PLAYLIST_INVALIDATE':
               useSyncStore.setState({ lastPlaylistInvalidation: envelope.payload });
               break;
+            case 'STAR_NOTIFY': {
+              const np = useSyncStore.getState().nowPlaying;
+              if (np && envelope.payload?.songId === np.songId) {
+                useSyncStore.setState({ nowPlaying: { ...np, starred: envelope.payload.starred } });
+              }
+              break;
+            }
             case 'ERROR':
               handleError(envelope.payload);
               break;

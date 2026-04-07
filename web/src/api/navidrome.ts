@@ -22,6 +22,7 @@ export interface Album {
   coverArt: string;
   songCount: number;
   year?: number;
+  starred?: string;
 }
 
 export interface Song {
@@ -33,12 +34,15 @@ export interface Song {
   coverArt: string;
   duration: number;
   track: number;
+  starred?: string;
 }
 
 export interface ArtistID3 {
   id: string;
   name: string;
   albumCount: number;
+  coverArt?: string;
+  artistImageUrl?: string;
 }
 
 export interface ArtistIndex {
@@ -49,6 +53,8 @@ export interface ArtistIndex {
 export interface ArtistDetail {
   id: string;
   name: string;
+  coverArt?: string;
+  artistImageUrl?: string;
   album: Album[];
 }
 
@@ -134,8 +140,37 @@ export async function getArtist(id: string): Promise<ArtistDetail> {
   return {
     id: raw.id,
     name: raw.name ?? '',
+    coverArt: raw.coverArt ?? undefined,
+    artistImageUrl: raw.artistImageUrl ?? undefined,
     album: (raw?.album ?? []).map(mapAlbum),
   };
+}
+
+export interface ArtistInfo {
+  largeImageUrl?: string;
+  mediumImageUrl?: string;
+  smallImageUrl?: string;
+}
+
+// In-memory cache for artist image URLs so we don't re-fetch constantly
+const _artistImageCache = new Map<string, ArtistInfo>();
+
+export async function getArtistInfo2(id: string): Promise<ArtistInfo> {
+  const cached = _artistImageCache.get(id);
+  if (cached) return cached;
+
+  await getConfig();
+  const url = buildUrl('/rest/getArtistInfo2.view', { id });
+  const res = await fetch(url);
+  const data = await res.json();
+  const raw = data?.['subsonic-response']?.artistInfo2;
+  const info: ArtistInfo = {
+    largeImageUrl: raw?.largeImageUrl || undefined,
+    mediumImageUrl: raw?.mediumImageUrl || undefined,
+    smallImageUrl: raw?.smallImageUrl || undefined,
+  };
+  _artistImageCache.set(id, info);
+  return info;
 }
 
 export async function getSongs(
@@ -206,6 +241,24 @@ export async function deletePlaylist(id: string): Promise<void> {
   await fetch(url);
 }
 
+export async function star(id: string): Promise<void> {
+  await getConfig();
+  const url = buildUrl('/rest/star.view', { id });
+  await fetch(url);
+}
+
+export async function unstar(id: string): Promise<void> {
+  await getConfig();
+  const url = buildUrl('/rest/unstar.view', { id });
+  await fetch(url);
+}
+
+export async function scrobble(id: string): Promise<void> {
+  await getConfig();
+  const url = buildUrl('/rest/scrobble.view', { id });
+  await fetch(url);
+}
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function mapAlbum(raw: any): Album {
   return {
@@ -215,6 +268,7 @@ function mapAlbum(raw: any): Album {
     coverArt: raw.coverArt ?? '',
     songCount: raw.songCount ?? 0,
     year: raw.year,
+    starred: raw.starred,
   };
 }
 
@@ -229,6 +283,7 @@ function mapSong(raw: any): Song {
     coverArt: raw.coverArt ?? '',
     duration: raw.duration ?? 0,
     track: raw.track ?? 0,
+    starred: raw.starred,
   };
 }
 
@@ -250,6 +305,8 @@ function mapArtistIndex(raw: any): ArtistIndex {
       id: a.id,
       name: a.name ?? '',
       albumCount: a.albumCount ?? 0,
+      coverArt: a.coverArt ?? undefined,
+      artistImageUrl: a.artistImageUrl ?? undefined,
     })),
   };
 }
