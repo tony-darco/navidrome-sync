@@ -60,6 +60,18 @@ nonisolated enum AppConfig {
         return id
     }
 
+    // MARK: - Appearance
+
+    static var coloredAlbumBackground: Bool {
+        get { defaults.object(forKey: "coloredAlbumBackground") as? Bool ?? true }
+        set { defaults.set(newValue, forKey: "coloredAlbumBackground") }
+    }
+
+    static var coloredPlaylistBackground: Bool {
+        get { defaults.object(forKey: "coloredPlaylistBackground") as? Bool ?? true }
+        set { defaults.set(newValue, forKey: "coloredPlaylistBackground") }
+    }
+
     /// Clear all stored credentials and server info.
     static func logout() {
         serverURL = nil

@@ -47,10 +47,15 @@ final class SyncStore: ObservableObject {
     /// Wiring closures in a separate method so `self` is fully initialized
     /// and captured as a let-binding (avoids "captured var self" errors).
     private func setupBindings() {
-        // Wire audio player state back into the store
+        // Wire audio player state back into the store (active clients only —
+        // observers derive isPlaying from STATE_SYNC, not the local player).
         audioPlayer.$isPlaying
             .receive(on: RunLoop.main)
-            .assign(to: &$isPlaying)
+            .sink { [weak self] playing in
+                guard let self, self.myRole == "active" else { return }
+                self.isPlaying = playing
+            }
+            .store(in: &cancellables)
 
         audioPlayer.$currentTime
             .receive(on: RunLoop.main)
@@ -149,6 +154,11 @@ final class SyncStore: ObservableObject {
             sendNowPlaying(song)
             sendQueueToHub()
         }
+    }
+
+    func appendToQueue(_ song: NowPlayingSong) {
+        queue.append(song)
+        if isConnected { sendQueueToHub() }
     }
 
     func play() {
@@ -414,7 +424,7 @@ final class SyncStore: ObservableObject {
         interpolationTask = Task {
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(1))
-                guard myRole == "observer", nowPlaying != nil else { continue }
+                guard myRole == "observer", nowPlaying != nil, isPlaying else { continue }
                 position += 1
             }
         }
@@ -491,6 +501,7 @@ final class SyncStore: ObservableObject {
             if myRole == "observer" || justBecameActive {
                 nowPlaying = song
                 if myRole == "observer" {
+                    isPlaying = song.isPlaying == true
                     position = song.positionSecs
                     startInterpolation()
                 }
