@@ -4,6 +4,22 @@ struct SettingsView: View {
     @EnvironmentObject private var store: SyncStore
     @Binding var isLoggedIn: Bool
     @State private var syncURL: String = AppConfig.syncServiceURL ?? ""
+    @State private var albumColorBg: Bool = AppConfig.coloredAlbumBackground
+    @State private var playlistColorBg: Bool = AppConfig.coloredPlaylistBackground
+
+    private var albumColorBinding: Binding<Bool> {
+        Binding(
+            get: { albumColorBg },
+            set: { albumColorBg = $0; AppConfig.coloredAlbumBackground = $0 }
+        )
+    }
+
+    private var playlistColorBinding: Binding<Bool> {
+        Binding(
+            get: { playlistColorBg },
+            set: { playlistColorBg = $0; AppConfig.coloredPlaylistBackground = $0 }
+        )
+    }
 
     var body: some View {
         NavigationStack {
@@ -80,6 +96,12 @@ struct SettingsView: View {
                         store.connect()
                     }
                     .disabled(syncURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+
+                // Appearance
+                Section("Appearance") {
+                    Toggle("Album Color Background", isOn: albumColorBinding)
+                    Toggle("Playlist Color Background", isOn: playlistColorBinding)
                 }
 
                 // Actions

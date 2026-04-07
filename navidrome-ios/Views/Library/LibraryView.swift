@@ -28,28 +28,30 @@ struct LibraryView: View {
                                 HStack {
                                     Image(systemName: row.icon)
                                         .foregroundColor(.blue)
-                                        .frame(width: 28, height: 28)
+                                        .font(.title2)
+                                        .frame(width: 32, height: 32)
                                     Text(row.title)
+                                        .font(.title3)
                                         .foregroundColor(.primary)
                                     Spacer()
                                     Image(systemName: "chevron.right")
                                         .foregroundColor(.secondary)
-                                        .font(.footnote)
+                                        .font(.body)
                                 }
-                                .padding(.vertical, 10)
-                                .padding(.horizontal, 16)
+                                .padding(.vertical, 8)
+                                .padding(.horizontal, 0)
                                 .contentShape(Rectangle())
                             }
                             .buttonStyle(.plain)
                             if row.title != libraryRows.last?.title {
-                                Divider().padding(.leading, 52)
+                                Divider().padding(.leading, 48)
                             }
                         }
                     }
-                    .background(Color(.systemGray6))
+                    .background(Color.black)
                     .clipShape(RoundedRectangle(cornerRadius: 10))
                     .padding(.horizontal)
-                    .padding(.top, 8)
+                    .padding(.top, 4)
 
                     // Recently Added
                     if !recentAlbums.isEmpty {

@@ -116,23 +116,26 @@ struct CoverArtImage: View {
     let id: String
     var size: Int = 300
 
+    @State private var image: UIImage?
+    @State private var isLoading = false
+
     var body: some View {
-        let url = NavidromeClient.shared.coverArtURL(id: id, size: size)
-        AsyncImage(url: url) { phase in
-            switch phase {
-            case .success(let image):
-                image.resizable().aspectRatio(contentMode: .fill)
-            case .failure:
-                placeholder
-            case .empty:
-                if url != nil {
-                    ProgressView()
-                } else {
-                    placeholder
-                }
-            @unknown default:
+        Group {
+            if let image {
+                Image(uiImage: image)
+                    .resizable()
+                    .aspectRatio(contentMode: .fill)
+            } else if isLoading {
+                ProgressView()
+            } else {
                 placeholder
             }
+        }
+        .task(id: id) {
+            guard !id.isEmpty, !isLoading else { return }
+            isLoading = true
+            image = await ImageCache.shared.image(for: id, size: size)
+            isLoading = false
         }
     }
 

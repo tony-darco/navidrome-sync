@@ -3,6 +3,8 @@ import SwiftUI
 struct NowPlayingView: View {
     @EnvironmentObject private var store: SyncStore
     @State private var showQueue = false
+    @State private var dominantColor: Color = .clear
+    @State private var lastCoverArtId: String = ""
 
     var body: some View {
         NavigationStack {
@@ -13,6 +15,7 @@ struct NowPlayingView: View {
                     emptyState
                 }
             }
+            .background(backgroundGradient)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .principal) {
@@ -26,6 +29,38 @@ struct NowPlayingView: View {
                         }
                     }
                 }
+            }
+            .onChange(of: store.nowPlaying?.coverArtId) { _, newId in
+                guard let newId, newId != lastCoverArtId else { return }
+                lastCoverArtId = newId
+                Task { await extractDominantColor(from: newId) }
+            }
+            .task {
+                if let id = store.nowPlaying?.coverArtId, !id.isEmpty {
+                    lastCoverArtId = id
+                    await extractDominantColor(from: id)
+                }
+            }
+        }
+    }
+
+    // MARK: - Background
+
+    @ViewBuilder
+    private var backgroundGradient: some View {
+        if dominantColor != .clear {
+            dominantColor.opacity(0.4)
+                .ignoresSafeArea()
+        } else {
+            Color.black.ignoresSafeArea()
+        }
+    }
+
+    private func extractDominantColor(from coverArtId: String) async {
+        guard !coverArtId.isEmpty else { return }
+        if let image = await ImageCache.shared.image(for: coverArtId, size: 50) {
+            withAnimation(.easeInOut(duration: 0.5)) {
+                dominantColor = image.dominantColor()
             }
         }
     }
@@ -167,11 +202,7 @@ struct NowPlayingView: View {
             }
 
             Button {
-                if store.myRole == "active" {
-                    store.isPlaying ? store.pause() : store.play()
-                } else {
-                    store.playSong(song)
-                }
+                store.isPlaying ? store.pause() : store.play()
             } label: {
                 Image(systemName: store.isPlaying ? "pause.circle.fill" : "play.circle.fill")
                     .font(.system(size: 56))
