@@ -69,14 +69,12 @@ export default function Library() {
   // Album detail view
   if (selectedAlbumId && albumDetail) {
     return (
-      <div className="p-4 max-w-3xl mx-auto">
-        <AlbumDetail
-          album={albumDetail}
-          songs={songs}
-          onPlayTrack={(song, albumSongs) => handlePlayTrack(song, albumSongs)}
-          onBack={() => setSelectedAlbumId(null)}
-        />
-      </div>
+      <AlbumDetail
+        album={albumDetail}
+        songs={songs}
+        onPlayTrack={(song, albumSongs) => handlePlayTrack(song, albumSongs)}
+        onBack={() => setSelectedAlbumId(null)}
+      />
     );
   }
 

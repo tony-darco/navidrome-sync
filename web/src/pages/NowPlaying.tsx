@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useSyncStore } from '../store/syncStore';
 import type { NowPlayingSong } from '../store/syncStore';
 import { getCoverArtUrl } from '../api/navidrome';
+import { getDominantColor, type RGB } from '../utils/dominantColor';
 import PlayHereButton from '../components/PlayHereButton';
 
 function formatTime(secs: number) {
@@ -10,11 +11,25 @@ function formatTime(secs: number) {
   return `${m}:${s.toString().padStart(2, '0')}`;
 }
 
+function useDominantBg(coverArtId: string | undefined) {
+  const [color, setColor] = useState<RGB | null>(null);
+  useEffect(() => {
+    if (!coverArtId) return;
+    getDominantColor(getCoverArtUrl(coverArtId, 50)).then(setColor);
+  }, [coverArtId]);
+  const c = color ?? { r: 30, g: 30, b: 30 };
+  return {
+    background: `linear-gradient(to bottom, rgba(${c.r},${c.g},${c.b},0.55) 0%, rgba(${c.r},${c.g},${c.b},0.35) 50%, rgba(${c.r},${c.g},${c.b},0.2) 100%)`,
+    backgroundColor: `rgb(${Math.round(c.r * 0.15)},${Math.round(c.g * 0.15)},${Math.round(c.b * 0.15)})`,
+  };
+}
+
 export default function NowPlaying() {
   const nowPlaying = useSyncStore((s) => s.nowPlaying);
   const myRole = useSyncStore((s) => s.myRole);
   const lastSyncTime = useSyncStore((s) => s.lastSyncTime);
   const showQueue = useSyncStore((s) => s.showQueue);
+  const bgStyle = useDominantBg(nowPlaying?.coverArtId);
 
   if (!nowPlaying) {
     return (
@@ -25,13 +40,17 @@ export default function NowPlaying() {
   }
 
   if (showQueue) {
-    return <QueueView isActive={myRole === 'active'} />;
+    return (
+      <div className="h-full" style={bgStyle}>
+        <QueueView isActive={myRole === 'active'} />
+      </div>
+    );
   }
 
   return myRole === 'active' ? (
-    <ActiveView song={nowPlaying} />
+    <ActiveView song={nowPlaying} bgStyle={bgStyle} />
   ) : (
-    <ObserverView song={nowPlaying} lastSyncTime={lastSyncTime} />
+    <ObserverView song={nowPlaying} lastSyncTime={lastSyncTime} bgStyle={bgStyle} />
   );
 }
 
@@ -188,7 +207,7 @@ function QueueView({ isActive }: { isActive: boolean }) {
 }
 
 /* ─── Active Client View ─── */
-function ActiveView({ song }: { song: NowPlayingSong }) {
+function ActiveView({ song, bgStyle }: { song: NowPlayingSong; bgStyle: React.CSSProperties }) {
   const isPlaying = useSyncStore((s) => s.isPlaying);
   const position = useSyncStore((s) => s.position);
   const play = useSyncStore((s) => s.play);
@@ -203,6 +222,7 @@ function ActiveView({ song }: { song: NowPlayingSong }) {
   const [seekPos, setSeekPos] = useState<number | null>(null);
 
   return (
+    <div className="h-full" style={bgStyle}>
     <div className="flex flex-col items-center justify-center gap-4 p-6 w-full max-w-xl mx-auto h-full overflow-hidden">
 
       <img
@@ -300,6 +320,7 @@ function ActiveView({ song }: { song: NowPlayingSong }) {
         <QueueButton />
       </div>
     </div>
+    </div>
   );
 }
 
@@ -307,9 +328,11 @@ function ActiveView({ song }: { song: NowPlayingSong }) {
 function ObserverView({
   song,
   lastSyncTime,
+  bgStyle,
 }: {
   song: NowPlayingSong;
   lastSyncTime: number;
+  bgStyle: React.CSSProperties;
 }) {
   const isPlaying = useSyncStore((s) => s.isPlaying);
   const play = useSyncStore((s) => s.play);
@@ -322,9 +345,10 @@ function ObserverView({
   const cycleRepeatMode = useSyncStore((s) => s.cycleRepeatMode);
   const [interpolatedPos, setInterpolatedPos] = useState(song.positionSecs);
 
-  // Interpolate position locally
+  // Interpolate position locally (only while playing)
   useEffect(() => {
     setInterpolatedPos(song.positionSecs);
+    if (!isPlaying) return;
     const interval = setInterval(() => {
       setInterpolatedPos((prev) => {
         const next = prev + 1;
@@ -332,9 +356,10 @@ function ObserverView({
       });
     }, 1000);
     return () => clearInterval(interval);
-  }, [song.positionSecs, song.durationSecs, lastSyncTime]);
+  }, [song.positionSecs, song.durationSecs, lastSyncTime, isPlaying]);
 
   return (
+    <div className="h-full" style={bgStyle}>
     <div className="flex flex-col items-center justify-center gap-4 p-6 w-full max-w-xl mx-auto h-full overflow-hidden">
       <img
         src={getCoverArtUrl(song.coverArtId, 600)}
@@ -425,6 +450,7 @@ function ObserverView({
         <QueueButton />
         <PlayHereButton />
       </div>
+    </div>
     </div>
   );
 }

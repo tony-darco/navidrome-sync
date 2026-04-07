@@ -1,50 +1,28 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { usePlaylists } from '../hooks/usePlaylists';
-import PlaylistList from '../components/PlaylistList';
-import PlaylistDetail from '../components/PlaylistDetail';
+import PlaylistGrid from '../components/PlaylistGrid';
 import PlaylistCreateModal from '../components/PlaylistCreateModal';
-import PlaylistEditSheet from '../components/PlaylistEditSheet';
-import type { Playlist } from '../api/navidrome';  // type-only import
+import type { Playlist } from '../api/navidrome';
 
 export default function Playlists() {
   const { playlists, loading, error, refetch } = usePlaylists();
-  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
-  const [editingId, setEditingId] = useState<string | null>(null);
+  const navigate = useNavigate();
 
-  if (editingId) {
-    return (
-      <PlaylistEditSheet
-        playlistId={editingId}
-        onClose={() => {
-          setEditingId(null);
-          refetch();
-        }}
-      />
-    );
-  }
-
-  if (selectedId) {
-    return (
-      <div className="p-4">
-        <PlaylistDetail
-          playlistId={selectedId}
-          onBack={() => setSelectedId(null)}
-          onEdit={() => setEditingId(selectedId)}
-        />
-      </div>
-    );
-  }
+  const handleSelect = (pl: Playlist) => {
+    navigate(`/playlists/${pl.id}`);
+  };
 
   return (
-    <div className="p-4">
-      <div className="flex items-center justify-between mb-4">
-        <h1 className="text-xl font-bold">Playlists</h1>
+    <div className="p-6 max-w-6xl mx-auto">
+      <div className="flex items-center justify-between mb-6">
+        <h1 className="text-2xl font-bold">Playlists</h1>
         <button
           onClick={() => setShowCreate(true)}
-          className="px-3 py-1.5 text-sm bg-blue-600 hover:bg-blue-500 rounded-full"
+          className="px-4 py-2 text-sm bg-blue-600 hover:bg-blue-500 rounded-full font-medium"
         >
-          + New
+          + New Playlist
         </button>
       </div>
 
@@ -60,10 +38,7 @@ export default function Playlists() {
         </div>
       )}
       {!loading && !error && (
-        <PlaylistList
-          playlists={playlists}
-          onSelect={(pl: Playlist) => setSelectedId(pl.id)}
-        />
+        <PlaylistGrid playlists={playlists} onSelect={handleSelect} />
       )}
 
       <PlaylistCreateModal open={showCreate} onClose={() => setShowCreate(false)} />

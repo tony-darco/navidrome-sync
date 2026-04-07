@@ -35,6 +35,23 @@ export interface Song {
   track: number;
 }
 
+export interface ArtistID3 {
+  id: string;
+  name: string;
+  albumCount: number;
+}
+
+export interface ArtistIndex {
+  name: string;
+  artist: ArtistID3[];
+}
+
+export interface ArtistDetail {
+  id: string;
+  name: string;
+  album: Album[];
+}
+
 export interface Playlist {
   id: string;
   name: string;
@@ -97,6 +114,46 @@ export function streamUrl(songId: string): string {
 
 export function getCoverArtUrl(id: string, size: number = 300): string {
   return buildUrl('/rest/getCoverArt.view', { id, size: String(size) });
+}
+
+export async function getArtists(): Promise<ArtistIndex[]> {
+  await getConfig();
+  const url = buildUrl('/rest/getArtists.view');
+  const res = await fetch(url);
+  const data = await res.json();
+  const indexes = data?.['subsonic-response']?.artists?.index;
+  return (indexes ?? []).map(mapArtistIndex);
+}
+
+export async function getArtist(id: string): Promise<ArtistDetail> {
+  await getConfig();
+  const url = buildUrl('/rest/getArtist.view', { id });
+  const res = await fetch(url);
+  const data = await res.json();
+  const raw = data?.['subsonic-response']?.artist;
+  return {
+    id: raw.id,
+    name: raw.name ?? '',
+    album: (raw?.album ?? []).map(mapAlbum),
+  };
+}
+
+export async function getSongs(
+  offset: number = 0,
+  count: number = 50,
+): Promise<Song[]> {
+  await getConfig();
+  const url = buildUrl('/rest/search3.view', {
+    query: '',
+    songCount: String(count),
+    songOffset: String(offset),
+    artistCount: '0',
+    albumCount: '0',
+  });
+  const res = await fetch(url);
+  const data = await res.json();
+  const result = data?.['subsonic-response']?.searchResult3;
+  return (result?.song ?? []).map(mapSong);
 }
 
 export async function getPlaylists(): Promise<Playlist[]> {
@@ -182,5 +239,17 @@ function mapPlaylist(raw: any): Playlist {
     name: raw.name ?? '',
     songCount: raw.songCount ?? 0,
     coverArt: raw.coverArt ?? '',
+  };
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function mapArtistIndex(raw: any): ArtistIndex {
+  return {
+    name: raw.name ?? '',
+    artist: (raw.artist ?? []).map((a: any) => ({  // eslint-disable-line @typescript-eslint/no-explicit-any
+      id: a.id,
+      name: a.name ?? '',
+      albumCount: a.albumCount ?? 0,
+    })),
   };
 }
