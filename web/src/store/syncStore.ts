@@ -78,6 +78,7 @@ interface SyncState {
 
   toggleShuffle: () => void;
   cycleRepeatMode: () => void;
+  appendToQueue: (song: NowPlayingSong) => void;
   removeFromQueue: (index: number) => void;
   playQueueIndex: (index: number, isCommand?: boolean) => void;
   clearQueue: () => void;
@@ -278,6 +279,7 @@ export const useSyncStore = create<SyncState>((set, get) => ({
 
   play: () => {
     if (get().myRole !== 'active') {
+      set({ isPlaying: true });
       get().sendCommand('PLAY');
       return;
     }
@@ -287,6 +289,7 @@ export const useSyncStore = create<SyncState>((set, get) => ({
 
   pause: () => {
     if (get().myRole !== 'active') {
+      set({ isPlaying: false });
       get().sendCommand('PAUSE');
       return;
     }
@@ -390,6 +393,17 @@ export const useSyncStore = create<SyncState>((set, get) => ({
     setTimeout(() => get().sendPlaybackOptions(), 0);
   },
 
+  appendToQueue: (song: NowPlayingSong) => {
+    const { queue, queueIndex, myRole, sendQueue, sendCommand } = get();
+    if (myRole !== 'active') {
+      sendCommand('LOAD_QUEUE', { queue: [...queue, song], startIndex: queueIndex });
+      return;
+    }
+    const newQueue = [...queue, song];
+    set({ queue: newQueue });
+    sendQueue(newQueue, queueIndex);
+  },
+
   removeFromQueue: (index: number) => {
     const { queue, queueIndex, sendQueue } = get();
     if (index < 0 || index >= queue.length) return;
@@ -485,8 +499,18 @@ export const useSyncStore = create<SyncState>((set, get) => ({
 }));
 
 // Wire audio element events back into the store.
-audio.addEventListener('play', () => useSyncStore.setState({ isPlaying: true }));
-audio.addEventListener('pause', () => useSyncStore.setState({ isPlaying: false }));
+// Only update isPlaying from audio events when we are the active client —
+// observers derive their isPlaying from STATE_SYNC broadcasts.
+audio.addEventListener('play', () => {
+  if (useSyncStore.getState().myRole === 'active') {
+    useSyncStore.setState({ isPlaying: true });
+  }
+});
+audio.addEventListener('pause', () => {
+  if (useSyncStore.getState().myRole === 'active') {
+    useSyncStore.setState({ isPlaying: false });
+  }
+});
 audio.addEventListener('timeupdate', () => {
   useSyncStore.setState({ position: audio.currentTime });
 });

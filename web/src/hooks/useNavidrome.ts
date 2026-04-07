@@ -85,3 +85,75 @@ export function useSearch() {
 
   return { results, loading, error, doSearch };
 }
+
+export function useArtists() {
+  const [artists, setArtists] = useState<api.ArtistIndex[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    api.getArtists().then((result) => {
+      if (!cancelled) setArtists(result);
+    }).catch((e) => {
+      if (!cancelled) setError(e instanceof Error ? e.message : 'Failed to load artists');
+    }).finally(() => {
+      if (!cancelled) setLoading(false);
+    });
+    return () => { cancelled = true; };
+  }, []);
+
+  return { artists, loading, error };
+}
+
+export function useArtistDetail(artistId: string | null) {
+  const [artist, setArtist] = useState<api.ArtistDetail | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!artistId) return;
+    let cancelled = false;
+    // Use microtask to batch with render and avoid lint warning
+    queueMicrotask(() => { if (!cancelled) { setLoading(true); setError(null); } });
+    api.getArtist(artistId).then((result) => {
+      if (!cancelled) setArtist(result);
+    }).catch((e) => {
+      if (!cancelled) setError(e instanceof Error ? e.message : 'Failed to load artist');
+    }).finally(() => {
+      if (!cancelled) setLoading(false);
+    });
+    return () => { cancelled = true; };
+  }, [artistId]);
+
+  return { artist, loading, error };
+}
+
+export function useSongs() {
+  const [songs, setSongs] = useState<api.Song[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const loadMore = useCallback(async (offset = 0, count = 50) => {
+    setLoading(true);
+    setError(null);
+    try {
+      const result = await api.getSongs(offset, count);
+      if (offset > 0) {
+        setSongs((prev) => [...prev, ...result]);
+      } else {
+        setSongs(result);
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to load songs');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadMore();
+  }, [loadMore]);
+
+  return { songs, loading, error, loadMore };
+}

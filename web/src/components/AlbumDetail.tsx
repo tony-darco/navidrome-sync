@@ -1,5 +1,10 @@
+import { useState, useEffect } from 'react';
 import type { Song, Album } from '../api/navidrome';
 import { getCoverArtUrl } from '../api/navidrome';
+import { useSyncStore } from '../store/syncStore';
+import { getDominantColor, type RGB } from '../utils/dominantColor';
+import DetailHeader from './DetailHeader';
+import SongRow from './SongRow';
 
 interface AlbumDetailProps {
   album: Album;
@@ -8,56 +13,71 @@ interface AlbumDetailProps {
   onBack: () => void;
 }
 
-function formatDuration(secs: number) {
-  const m = Math.floor(secs / 60);
-  const s = secs % 60;
-  return `${m}:${s.toString().padStart(2, '0')}`;
+function songToNowPlaying(song: Song) {
+  return {
+    songId: song.id,
+    title: song.title,
+    artist: song.artist,
+    album: song.album,
+    coverArtId: song.coverArt,
+    durationSecs: song.duration,
+    positionSecs: 0,
+  };
 }
 
 export default function AlbumDetail({ album, songs, onPlayTrack, onBack }: AlbumDetailProps) {
+  const [dominantColor, setDominantColor] = useState<RGB | null>(null);
+  const toggleShuffle = useSyncStore((s) => s.toggleShuffle);
+  const playQueue = useSyncStore((s) => s.playQueue);
+  const appendToQueue = useSyncStore((s) => s.appendToQueue);
+
+  useEffect(() => {
+    getDominantColor(getCoverArtUrl(album.coverArt, 50)).then(setDominantColor);
+  }, [album.coverArt]);
+
+  const handlePlayAll = () => {
+    const queue = songs.map(songToNowPlaying);
+    playQueue(queue, 0);
+  };
+
+  const handleShuffle = () => {
+    toggleShuffle();
+    handlePlayAll();
+  };
+
+  const meta = [album.year, `${album.songCount} tracks`].filter(Boolean).join(' \u00b7 ');
+  const c = dominantColor ?? { r: 30, g: 30, b: 30 };
+  const moodBg = {
+    background: `linear-gradient(to bottom, rgba(${c.r},${c.g},${c.b},0.55) 0%, rgba(${c.r},${c.g},${c.b},0.35) 50%, rgba(${c.r},${c.g},${c.b},0.2) 100%)`,
+    backgroundColor: `rgb(${Math.round(c.r * 0.15)},${Math.round(c.g * 0.15)},${Math.round(c.b * 0.15)})`,
+  };
+
   return (
-    <div>
-      <button
-        onClick={onBack}
-        className="text-sm text-zinc-400 hover:text-white mb-4 flex items-center gap-1"
-      >
-        <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z" /></svg>
-        Back
-      </button>
-
-      <div className="flex gap-4 mb-6">
-        <img
-          src={getCoverArtUrl(album.coverArt, 300)}
-          alt={album.name}
-          className="w-32 h-32 rounded-lg object-cover bg-zinc-800"
+    <div className="min-h-full" style={moodBg}>
+      <div className="px-6 pt-6 pb-12 max-w-4xl mx-auto">
+        <DetailHeader
+          coverArtUrl={getCoverArtUrl(album.coverArt, 600)}
+          title={album.name}
+          subtitle={album.artist}
+          meta={meta}
+          onShuffle={handleShuffle}
+          onPlay={handlePlayAll}
+          onBack={onBack}
         />
-        <div className="flex flex-col justify-end">
-          <h2 className="text-xl font-semibold">{album.name}</h2>
-          <p className="text-zinc-400">{album.artist}</p>
-          {album.year && <p className="text-zinc-500 text-sm">{album.year}</p>}
-          <p className="text-zinc-600 text-xs mt-1">{album.songCount} tracks</p>
-        </div>
-      </div>
 
-      <div className="divide-y divide-zinc-800/50">
-        {songs.map((song) => (
-          <button
-            key={song.id}
-            onClick={() => onPlayTrack(song, songs)}
-            className="w-full flex items-center gap-3 py-2.5 px-2 hover:bg-zinc-800/40 rounded transition-colors text-left"
-          >
-            <span className="w-6 text-right text-xs text-zinc-600 tabular-nums">
-              {song.track}
-            </span>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm truncate">{song.title}</p>
-              <p className="text-xs text-zinc-500 truncate">{song.artist}</p>
-            </div>
-            <span className="text-xs text-zinc-600 tabular-nums">
-              {formatDuration(song.duration)}
-            </span>
-          </button>
-        ))}
+        <div>
+          {songs.map((song) => (
+            <SongRow
+              key={song.id}
+              song={song}
+              onPlay={() => onPlayTrack(song, songs)}
+              menuItems={[
+                { label: 'Play', onClick: () => onPlayTrack(song, songs) },
+                { label: 'Add to Queue', onClick: () => appendToQueue(songToNowPlaying(song)) },
+              ]}
+            />
+          ))}
+        </div>
       </div>
     </div>
   );
