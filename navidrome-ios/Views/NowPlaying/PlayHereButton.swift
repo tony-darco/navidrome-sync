@@ -11,10 +11,10 @@ struct PlayHereButton: View {
                 Label("Play Here", systemImage: "play.fill")
                     .font(.caption)
                     .fontWeight(.medium)
-                    .foregroundStyle(.blue)
+                    .foregroundStyle(Color.brandPink)
                     .padding(.horizontal, 12)
                     .padding(.vertical, 6)
-                    .background(Color.blue.opacity(0.2))
+                    .background(Color.brandPink.opacity(0.2))
                     .clipShape(Capsule())
             }
         }

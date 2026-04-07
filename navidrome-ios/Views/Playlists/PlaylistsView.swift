@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct PlaylistsView: View {
+    @EnvironmentObject private var store: SyncStore
     @EnvironmentObject private var playlistStore: PlaylistStore
     @State private var showCreateSheet = false
     @State private var searchText = ""
@@ -16,9 +17,12 @@ struct PlaylistsView: View {
                 NavigationLink(value: playlist) {
                     PlaylistRowView(playlist: playlist)
                 }
+                .listRowBackground(Color.clear)
             }
         }
         .listStyle(.plain)
+        .scrollContentBackground(.hidden)
+        .background { store.dominantBackgroundColor.ignoresSafeArea() }
         .searchable(text: $searchText, prompt: "Search playlists")
         .navigationTitle("Playlists")
         .navigationDestination(for: Playlist.self) { playlist in

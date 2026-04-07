@@ -3,8 +3,6 @@ import SwiftUI
 struct NowPlayingView: View {
     @EnvironmentObject private var store: SyncStore
     @State private var showQueue = false
-    @State private var dominantColor: Color = .clear
-    @State private var lastCoverArtId: String = ""
 
     var body: some View {
         NavigationStack {
@@ -24,23 +22,13 @@ struct NowPlayingView: View {
                             .font(.headline)
                         if store.isConnected {
                             Circle()
-                                .fill(.blue)
+                                .fill(Color.brandPink)
                                 .frame(width: 8, height: 8)
                         }
                     }
                 }
             }
-            .onChange(of: store.nowPlaying?.coverArtId) { _, newId in
-                guard let newId, newId != lastCoverArtId else { return }
-                lastCoverArtId = newId
-                Task { await extractDominantColor(from: newId) }
-            }
-            .task {
-                if let id = store.nowPlaying?.coverArtId, !id.isEmpty {
-                    lastCoverArtId = id
-                    await extractDominantColor(from: id)
-                }
-            }
+
         }
     }
 
@@ -48,21 +36,8 @@ struct NowPlayingView: View {
 
     @ViewBuilder
     private var backgroundGradient: some View {
-        if dominantColor != .clear {
-            dominantColor.opacity(0.4)
-                .ignoresSafeArea()
-        } else {
-            Color.black.ignoresSafeArea()
-        }
-    }
-
-    private func extractDominantColor(from coverArtId: String) async {
-        guard !coverArtId.isEmpty else { return }
-        if let image = await ImageCache.shared.image(for: coverArtId, size: 50) {
-            withAnimation(.easeInOut(duration: 0.5)) {
-                dominantColor = image.dominantColor()
-            }
-        }
+        store.dominantBackgroundColor
+            .ignoresSafeArea()
     }
 
     // MARK: - Empty state
@@ -106,6 +81,13 @@ struct NowPlayingView: View {
                     .lineLimit(1)
             }
             .padding(.horizontal)
+
+            // Star button
+            Button { store.toggleStar() } label: {
+                Image(systemName: song.starred == true ? "heart.fill" : "heart")
+                    .font(.title2)
+                    .foregroundStyle(song.starred == true ? .red : .secondary)
+            }
 
             // Progress
             if store.myRole == "active" {
@@ -223,7 +205,7 @@ struct NowPlayingView: View {
             Button { store.toggleShuffle() } label: {
                 Image(systemName: "shuffle")
                     .font(.title3)
-                    .foregroundStyle(store.isShuffled ? .blue : .secondary)
+                    .foregroundStyle(store.isShuffled ? Color.brandPink : .secondary)
             }
 
             Spacer()
@@ -231,7 +213,7 @@ struct NowPlayingView: View {
             Button { store.toggleRepeat() } label: {
                 Image(systemName: store.repeatMode == .one ? "repeat.1" : "repeat")
                     .font(.title3)
-                    .foregroundStyle(store.repeatMode != .off ? .blue : .secondary)
+                    .foregroundStyle(store.repeatMode != .off ? Color.brandPink : .secondary)
             }
 
             Spacer()
@@ -320,7 +302,7 @@ struct QueueSheet: View {
                 Text(song.title)
                     .font(.subheadline)
                     .fontWeight(isActive ? .semibold : .regular)
-                    .foregroundStyle(isActive ? .blue : .primary)
+                    .foregroundStyle(isActive ? Color.brandPink : .primary)
                     .lineLimit(1)
                 Text(song.artist)
                     .font(.caption)
