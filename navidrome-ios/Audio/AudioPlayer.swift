@@ -4,7 +4,7 @@ import MediaPlayer
 
 /// Wraps AVPlayer for streaming audio playback with background audio
 /// and lock-screen / Control Center integration.
-nonisolated final class AudioPlayer: ObservableObject {
+final class AudioPlayer: ObservableObject {
     private var player = AVPlayer()
     private var timeObserver: Any?
     private var endObserver: NSObjectProtocol?
@@ -51,7 +51,9 @@ nonisolated final class AudioPlayer: ObservableObject {
     private func setupTimeObserver() {
         let interval = CMTime(seconds: 1, preferredTimescale: 1)
         timeObserver = player.addPeriodicTimeObserver(forInterval: interval, queue: .main) { [weak self] time in
-            self?.currentTime = time.seconds.isNaN ? 0 : time.seconds
+            guard let self else { return }
+            let seconds = time.seconds.isNaN ? 0 : time.seconds
+            Task { @MainActor in self.currentTime = seconds }
         }
     }
 
@@ -61,17 +63,19 @@ nonisolated final class AudioPlayer: ObservableObject {
             object: nil,
             queue: .main
         ) { [weak self] notification in
-            guard let item = notification.object as? AVPlayerItem,
-                  item == self?.player.currentItem else { return }
-            self?.onTrackEnd?()
+            guard let self, let item = notification.object as? AVPlayerItem else { return }
+            Task { @MainActor in
+                guard item == self.player.currentItem else { return }
+                self.onTrackEnd?()
+            }
         }
     }
 
     private func setupStatusObservation() {
         statusObservation = player.observe(\.timeControlStatus, options: [.new]) { [weak self] player, _ in
-            DispatchQueue.main.async {
-                self?.isPlaying = player.timeControlStatus == .playing
-            }
+            guard let self else { return }
+            let playing = player.timeControlStatus == .playing
+            Task { @MainActor in self.isPlaying = playing }
         }
     }
 
@@ -82,32 +86,36 @@ nonisolated final class AudioPlayer: ObservableObject {
 
         center.playCommand.isEnabled = true
         center.playCommand.addTarget { [weak self] _ in
-            self?.onRemotePlay?()
+            guard let self else { return .success }
+            Task { @MainActor in self.onRemotePlay?() }
             return .success
         }
 
         center.pauseCommand.isEnabled = true
         center.pauseCommand.addTarget { [weak self] _ in
-            self?.onRemotePause?()
+            guard let self else { return .success }
+            Task { @MainActor in self.onRemotePause?() }
             return .success
         }
 
         center.nextTrackCommand.isEnabled = true
         center.nextTrackCommand.addTarget { [weak self] _ in
-            self?.onRemoteNext?()
+            guard let self else { return .success }
+            Task { @MainActor in self.onRemoteNext?() }
             return .success
         }
 
         center.previousTrackCommand.isEnabled = true
         center.previousTrackCommand.addTarget { [weak self] _ in
-            self?.onRemotePrev?()
+            guard let self else { return .success }
+            Task { @MainActor in self.onRemotePrev?() }
             return .success
         }
 
         center.changePlaybackPositionCommand.isEnabled = true
         center.changePlaybackPositionCommand.addTarget { [weak self] event in
-            guard let posEvent = event as? MPChangePlaybackPositionCommandEvent else { return .commandFailed }
-            self?.onRemoteSeek?(posEvent.positionTime)
+            guard let self, let posEvent = event as? MPChangePlaybackPositionCommandEvent else { return .commandFailed }
+            Task { @MainActor in self.onRemoteSeek?(posEvent.positionTime) }
             return .success
         }
     }

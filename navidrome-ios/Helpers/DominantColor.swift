@@ -31,3 +31,25 @@ extension UIImage {
         return Color(red: r, green: g, blue: b)
     }
 }
+
+extension Color {
+    /// The app's brand pink color (#FF4E6B).
+    static let brandPink = Color(red: 255/255, green: 78/255, blue: 107/255)
+
+    /// The app's brand red color (#FF0436).
+    static let brandRed = Color(red: 255/255, green: 4/255, blue: 54/255)
+
+    /// Returns a darker version of the color by blending toward black.
+    /// `amount` 0.0 = original color, 1.0 = pure black.
+    func darkened(by amount: Double) -> Color {
+        let uiColor = UIColor(self)
+        var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
+        uiColor.getRed(&r, green: &g, blue: &b, alpha: &a)
+        let factor = 1.0 - min(max(amount, 0), 1)
+        return Color(
+            red: Double(r) * factor,
+            green: Double(g) * factor,
+            blue: Double(b) * factor
+        )
+    }
+}
