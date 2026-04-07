@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct ArtistsView: View {
+    @EnvironmentObject private var store: SyncStore
     @State private var artistIndexes: [ArtistIndex] = []
     @State private var isLoading = false
     @State private var selectedLetter: String?
@@ -19,11 +20,13 @@ struct ArtistsView: View {
                                 NavigationLink(value: artist) {
                                     ArtistRowView(artist: artist)
                                 }
+                                .listRowBackground(Color.clear)
                             }
                         }
                     }
                 }
                 .listStyle(.plain)
+                .scrollContentBackground(.hidden)
                 .onChange(of: selectedLetter) { _, newValue in
                     if let letter = newValue {
                         withAnimation {
@@ -37,6 +40,7 @@ struct ArtistsView: View {
                 AlphabetScrubber(letters: availableLetters, selectedLetter: $selectedLetter)
             }
         }
+        .background { store.dominantBackgroundColor.ignoresSafeArea() }
         .navigationTitle("Artists")
         .navigationDestination(for: ArtistID3.self) { artist in
             ArtistDetailView(artistId: artist.id, artistName: artist.name)

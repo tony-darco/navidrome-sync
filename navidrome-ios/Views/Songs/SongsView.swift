@@ -31,6 +31,7 @@ struct SongsView: View {
                                 Button { playSong(song) } label: {
                                     songRow(song)
                                 }
+                                .listRowBackground(Color.clear)
                             }
                         }
                     }
@@ -45,6 +46,7 @@ struct SongsView: View {
                     }
                 }
                 .listStyle(.plain)
+                .scrollContentBackground(.hidden)
                 .onChange(of: selectedLetter) { _, newValue in
                     if let letter = newValue {
                         withAnimation {
@@ -58,6 +60,7 @@ struct SongsView: View {
                 AlphabetScrubber(letters: availableLetters, selectedLetter: $selectedLetter)
             }
         }
+        .background { store.dominantBackgroundColor.ignoresSafeArea() }
         .navigationTitle("Songs")
         .task {
             await loadAllSongs()

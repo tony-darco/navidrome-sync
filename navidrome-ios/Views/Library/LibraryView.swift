@@ -27,7 +27,7 @@ struct LibraryView: View {
                             NavigationLink(value: row.title) {
                                 HStack {
                                     Image(systemName: row.icon)
-                                        .foregroundColor(.blue)
+                                        .foregroundColor(Color.brandPink)
                                         .font(.title2)
                                         .frame(width: 32, height: 32)
                                     Text(row.title)
@@ -48,8 +48,6 @@ struct LibraryView: View {
                             }
                         }
                     }
-                    .background(Color.black)
-                    .clipShape(RoundedRectangle(cornerRadius: 10))
                     .padding(.horizontal)
                     .padding(.top, 4)
 
@@ -90,7 +88,10 @@ struct LibraryView: View {
                     }
                 }
             }
-            .background(Color.black)
+            .background {
+                store.dominantBackgroundColor
+                    .ignoresSafeArea()
+            }
             .navigationTitle("Library")
             .navigationBarTitleDisplayMode(.large)
             .navigationDestination(for: String.self) { destination in

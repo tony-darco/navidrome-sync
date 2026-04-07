@@ -17,9 +17,6 @@ struct AlbumGridView: View {
             }
         }
         .padding()
-        .navigationDestination(for: Album.self) { album in
-            AlbumDetailView(albumId: album.id)
-        }
     }
 
     private func albumCell(_ album: Album) -> some View {
