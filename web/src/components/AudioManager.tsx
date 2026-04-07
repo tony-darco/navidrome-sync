@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import { useSyncStore } from '../store/syncStore';
+import { scrobble as apiScrobble } from '../api/navidrome';
 
 /**
  * Invisible component that lives in App — keeps the persistent audio element
@@ -31,6 +32,12 @@ export default function AudioManager() {
       const audio = getAudio();
       if (!audio.paused) {
         sendPositionUpdate(audio.currentTime);
+        // Scrobble at 50% of song duration
+        const { nowPlaying: np, scrobbledSongId } = useSyncStore.getState();
+        if (np && scrobbledSongId !== np.songId && np.durationSecs > 0 && audio.currentTime >= np.durationSecs / 2) {
+          useSyncStore.setState({ scrobbledSongId: np.songId });
+          apiScrobble(np.songId).catch(() => {});
+        }
       }
     }, 1000);
     return () => clearInterval(interval);

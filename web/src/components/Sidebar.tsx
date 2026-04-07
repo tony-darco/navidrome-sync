@@ -6,7 +6,7 @@ import { useSearch } from '../hooks/useNavidrome';
 import { getCoverArtUrl } from '../api/navidrome';
 import type { Album, Song } from '../api/navidrome';
 
-export default function Sidebar() {
+export default function Sidebar({ bgStyle }: { bgStyle?: React.CSSProperties }) {
   const isConnected = useSyncStore((s) => s.isConnected);
   const { playlists } = usePlaylists();
   const { results, loading: searchLoading, doSearch } = useSearch();
@@ -64,7 +64,7 @@ export default function Sidebar() {
     }`;
 
   return (
-    <aside className="w-60 flex-shrink-0 bg-zinc-900/80 border-r border-zinc-800 flex flex-col h-full overflow-hidden">
+    <aside className="w-60 flex-shrink-0 border-r border-zinc-800/50 flex flex-col h-full overflow-hidden backdrop-blur-md" style={bgStyle ?? { background: 'rgba(24,24,27,0.8)' }}>
       {/* Search */}
       <div className="p-3 relative">
         <div className="relative">

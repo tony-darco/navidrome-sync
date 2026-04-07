@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useArtists } from '../hooks/useNavidrome';
+import ArtistImage from '../components/ArtistImage';
 import type { ArtistID3 } from '../api/navidrome';
 
 type SortOption = 'az' | 'za' | 'albums';
@@ -88,12 +89,7 @@ export default function Artists() {
               onClick={() => navigate(`/artists/${artist.id}`)}
               className="group text-left rounded-lg p-3 hover:bg-zinc-800/60 transition-colors"
             >
-              {/* Artist avatar placeholder */}
-              <div className="w-full aspect-square rounded-full bg-zinc-800 mb-3 flex items-center justify-center group-hover:bg-zinc-700 transition-colors">
-                <svg className="w-12 h-12 text-zinc-600" viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z" />
-                </svg>
-              </div>
+              <ArtistImage artistId={artist.id} className="w-full aspect-square mb-3 group-hover:opacity-90 transition-opacity" />
               <p className="text-sm font-medium truncate text-center">{artist.name}</p>
               <p className="text-xs text-zinc-500 text-center">{artist.albumCount} album{artist.albumCount !== 1 ? 's' : ''}</p>
             </button>

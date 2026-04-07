@@ -61,12 +61,30 @@ function QueueButton() {
   return (
     <button
       onClick={() => setShowQueue(!showQueue)}
-      className={`transition-colors ${showQueue ? 'text-blue-500' : 'text-zinc-500 hover:text-white'}`}
+      className={`transition-colors ${showQueue ? 'text-accent' : 'text-zinc-500 hover:text-white'}`}
       aria-label="Queue"
       title="Queue"
     >
       <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
         <path d="M15 6H3v2h12V6zm0 4H3v2h12v-2zM3 16h8v-2H3v2zM17 6v8.18c-.31-.11-.65-.18-1-.18-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3V8h3V6h-5z" />
+      </svg>
+    </button>
+  );
+}
+
+/* ─── Star/heart button (used in both views) ─── */
+function StarButton({ song }: { song: NowPlayingSong }) {
+  const toggleStar = useSyncStore((s) => s.toggleStar);
+  const starred = song.starred ?? false;
+  return (
+    <button
+      onClick={toggleStar}
+      className={`transition-colors ${starred ? 'text-red-500' : 'text-zinc-500 hover:text-white'}`}
+      aria-label={starred ? 'Unfavorite' : 'Favorite'}
+      title={starred ? 'Unfavorite' : 'Favorite'}
+    >
+      <svg className="w-5 h-5" viewBox="0 0 24 24" fill={starred ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth={starred ? 0 : 2}>
+        <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" />
       </svg>
     </button>
   );
@@ -112,7 +130,7 @@ function QueueView({ isActive }: { isActive: boolean }) {
               className="w-12 h-12 rounded object-cover bg-zinc-800 flex-shrink-0"
             />
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-blue-500 truncate">{nowPlaying.title}</p>
+              <p className="text-sm font-medium text-accent truncate">{nowPlaying.title}</p>
               <p className="text-xs text-zinc-400 truncate">{nowPlaying.artist}</p>
             </div>
             <span className="text-xs text-zinc-500 truncate hidden sm:block max-w-[120px]">{nowPlaying.album}</span>
@@ -252,7 +270,7 @@ function ActiveView({ song, bgStyle }: { song: NowPlayingSong; bgStyle: React.CS
           onMouseUp={(e) => { seek(Number((e.target as HTMLInputElement).value)); setSeekPos(null); }}
           onTouchStart={() => setSeekPos(position)}
           onTouchEnd={(e) => { seek(Number((e.target as HTMLInputElement).value)); setSeekPos(null); }}
-          className="flex-1 accent-blue-500"
+          className="flex-1 accent-accent"
         />
         <span className="text-xs text-zinc-500 tabular-nums w-10">
           {formatTime(song.durationSecs)}
@@ -264,7 +282,7 @@ function ActiveView({ song, bgStyle }: { song: NowPlayingSong; bgStyle: React.CS
         {/* Shuffle */}
         <button
           onClick={toggleShuffle}
-          className={`transition-colors ${shuffle ? 'text-blue-500' : 'text-zinc-500 hover:text-white'}`}
+          className={`transition-colors ${shuffle ? 'text-accent' : 'text-zinc-500 hover:text-white'}`}
           aria-label="Shuffle"
           title="Shuffle"
         >
@@ -302,7 +320,7 @@ function ActiveView({ song, bgStyle }: { song: NowPlayingSong; bgStyle: React.CS
         {/* Repeat */}
         <button
           onClick={cycleRepeatMode}
-          className={`relative transition-colors ${repeatMode !== 'off' ? 'text-blue-500' : 'text-zinc-500 hover:text-white'}`}
+          className={`relative transition-colors ${repeatMode !== 'off' ? 'text-accent' : 'text-zinc-500 hover:text-white'}`}
           aria-label={`Repeat: ${repeatMode}`}
           title={`Repeat: ${repeatMode}`}
         >
@@ -310,13 +328,14 @@ function ActiveView({ song, bgStyle }: { song: NowPlayingSong; bgStyle: React.CS
             <path d="M7 7h10v3l4-4-4-4v3H5v6h2V7zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2v4z" />
           </svg>
           {repeatMode === 'one' && (
-            <span className="absolute -top-1 -right-1 text-[9px] font-bold text-blue-500">1</span>
+            <span className="absolute -top-1 -right-1 text-[9px] font-bold text-accent">1</span>
           )}
         </button>
       </div>
 
       <div className="flex items-center gap-4 flex-shrink-0">
-        <span className="text-xs text-blue-500 font-medium">Active Client</span>
+        <StarButton song={song} />
+        <span className="text-xs text-accent font-medium">Active Client</span>
         <QueueButton />
       </div>
     </div>
@@ -394,7 +413,7 @@ function ObserverView({
         {/* Shuffle */}
         <button
           onClick={toggleShuffle}
-          className={`transition-colors ${shuffle ? 'text-blue-500' : 'text-zinc-500 hover:text-white'}`}
+          className={`transition-colors ${shuffle ? 'text-accent' : 'text-zinc-500 hover:text-white'}`}
           aria-label="Shuffle"
           title="Shuffle"
         >
@@ -432,7 +451,7 @@ function ObserverView({
         {/* Repeat */}
         <button
           onClick={cycleRepeatMode}
-          className={`relative transition-colors ${repeatMode !== 'off' ? 'text-blue-500' : 'text-zinc-500 hover:text-white'}`}
+          className={`relative transition-colors ${repeatMode !== 'off' ? 'text-accent' : 'text-zinc-500 hover:text-white'}`}
           aria-label={`Repeat: ${repeatMode}`}
           title={`Repeat: ${repeatMode}`}
         >
@@ -440,12 +459,13 @@ function ObserverView({
             <path d="M7 7h10v3l4-4-4-4v3H5v6h2V7zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2v4z" />
           </svg>
           {repeatMode === 'one' && (
-            <span className="absolute -top-1 -right-1 text-[9px] font-bold text-blue-500">1</span>
+            <span className="absolute -top-1 -right-1 text-[9px] font-bold text-accent">1</span>
           )}
         </button>
       </div>
 
       <div className="flex items-center gap-4 flex-shrink-0">
+        <StarButton song={song} />
         <span className="text-xs text-zinc-500">Observing</span>
         <QueueButton />
         <PlayHereButton />
