@@ -21,7 +21,7 @@ struct LoginView: View {
             VStack(spacing: 8) {
                 Image(systemName: "hifispeaker.2")
                     .font(.system(size: 48))
-                    .foregroundStyle(.blue)
+                    .foregroundStyle(Color.brandPink)
                 Text("Music Sync")
                     .font(.largeTitle)
                     .fontWeight(.bold)
@@ -84,7 +84,7 @@ struct LoginView: View {
                 }
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 14)
-                .background(isLoading ? Color.gray.opacity(0.3) : Color.blue)
+                .background(isLoading ? Color.gray.opacity(0.3) : Color.brandRed)
                 .foregroundStyle(.white)
                 .clipShape(RoundedRectangle(cornerRadius: 10))
             }

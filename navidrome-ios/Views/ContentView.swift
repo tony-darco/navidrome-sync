@@ -29,6 +29,12 @@ struct ContentView: View {
                     }
                     .toolbarBackground(.visible, for: .tabBar)
             }
+            .tint(Color.brandPink)
+            .toolbarBackground(
+                AnyShapeStyle(store.dominantBackgroundColor),
+                for: .tabBar
+            )
+            .toolbarColorScheme(.dark, for: .tabBar)
 
             // Persistent mini player bar above tab bar (hidden on Now Playing tab)
             if store.nowPlaying != nil && selectedTab != 0 {
@@ -105,7 +111,9 @@ struct NowPlayingBar: View {
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 8)
-            .background(.ultraThinMaterial)
+            .background {
+                store.dominantBackgroundColor
+            }
         }
     }
 }

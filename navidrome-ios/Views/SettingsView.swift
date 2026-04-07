@@ -31,12 +31,13 @@ struct SettingsView: View {
                         Spacer()
                         HStack(spacing: 6) {
                             Circle()
-                                .fill(store.isConnected ? Color.blue : Color.red)
+                                .fill(store.isConnected ? Color.brandPink : Color.brandRed)
                                 .frame(width: 8, height: 8)
                             Text(store.isConnected ? "Online" : "Disconnected")
                                 .foregroundStyle(.secondary)
                         }
                     }
+                    .listRowBackground(Color.clear)
 
                     HStack {
                         Text("Role")
@@ -44,6 +45,7 @@ struct SettingsView: View {
                         Text(store.myRole.capitalized)
                             .foregroundStyle(.secondary)
                     }
+                    .listRowBackground(Color.clear)
 
                     HStack {
                         Text("Client ID")
@@ -52,6 +54,7 @@ struct SettingsView: View {
                             .foregroundStyle(.secondary)
                             .font(.caption)
                     }
+                    .listRowBackground(Color.clear)
 
                     if !store.connectedClients.isEmpty {
                         HStack {
@@ -60,6 +63,7 @@ struct SettingsView: View {
                             Text("\(store.connectedClients.count)")
                                 .foregroundStyle(.secondary)
                         }
+                        .listRowBackground(Color.clear)
                     }
                 }
 
@@ -73,6 +77,7 @@ struct SettingsView: View {
                             .font(.caption)
                             .lineLimit(1)
                     }
+                    .listRowBackground(Color.clear)
 
                     HStack {
                         Text("Username")
@@ -80,6 +85,7 @@ struct SettingsView: View {
                         Text(AppConfig.username ?? "—")
                             .foregroundStyle(.secondary)
                     }
+                    .listRowBackground(Color.clear)
                 }
 
                 // Sync service
@@ -89,6 +95,7 @@ struct SettingsView: View {
                         .autocorrectionDisabled()
                         .keyboardType(.URL)
                         .onSubmit { saveSyncURL() }
+                        .listRowBackground(Color.clear)
 
                     Button(store.isConnected ? "Reconnect" : "Connect") {
                         saveSyncURL()
@@ -96,12 +103,15 @@ struct SettingsView: View {
                         store.connect()
                     }
                     .disabled(syncURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    .listRowBackground(Color.clear)
                 }
 
                 // Appearance
                 Section("Appearance") {
                     Toggle("Album Color Background", isOn: albumColorBinding)
+                        .listRowBackground(Color.clear)
                     Toggle("Playlist Color Background", isOn: playlistColorBinding)
+                        .listRowBackground(Color.clear)
                 }
 
                 // Actions
@@ -109,8 +119,11 @@ struct SettingsView: View {
                     Button("Sign Out", role: .destructive) {
                         logout()
                     }
+                    .listRowBackground(Color.clear)
                 }
             }
+            .scrollContentBackground(.hidden)
+            .background { store.dominantBackgroundColor.ignoresSafeArea() }
             .navigationTitle("Settings")
         }
     }
