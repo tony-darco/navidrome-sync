@@ -1,6 +1,7 @@
 .env
 .DS_Store
 navidrome-sync
+node_modules/
 web/node_modules/
 web/dist/
 *log*
