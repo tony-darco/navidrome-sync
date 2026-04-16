@@ -31,6 +31,7 @@ export interface Song {
   artist: string;
   album: string;
   albumId: string;
+  artistId: string;
   coverArt: string;
   duration: number;
   track: number;
@@ -69,6 +70,12 @@ export interface PlaylistWithSongs extends Playlist {
   entry: Song[];
 }
 
+export interface Genre {
+  value: string;
+  songCount: number;
+  albumCount: number;
+}
+
 export async function init() {
   await getConfig();
 }
@@ -77,13 +84,16 @@ export async function getAlbums(
   type: string = 'newest',
   size: number = 50,
   offset: number = 0,
+  genre?: string,
 ): Promise<Album[]> {
   await getConfig();
-  const url = buildUrl('/rest/getAlbumList2.view', {
+  const params: Record<string, string> = {
     type,
     size: String(size),
     offset: String(offset),
-  });
+  };
+  if (genre) params.genre = genre;
+  const url = buildUrl('/rest/getAlbumList2.view', params);
   const res = await fetch(url);
   const data = await res.json();
   const list = data?.['subsonic-response']?.albumList2?.album;
@@ -191,6 +201,36 @@ export async function getSongs(
   return (result?.song ?? []).map(mapSong);
 }
 
+export async function getGenres(): Promise<Genre[]> {
+  await getConfig();
+  const url = buildUrl('/rest/getGenres.view');
+  const res = await fetch(url);
+  const data = await res.json();
+  const list = data?.['subsonic-response']?.genres?.genre;
+  return (list ?? []).map((g: any) => ({  // eslint-disable-line @typescript-eslint/no-explicit-any
+    value: g.value ?? '',
+    songCount: g.songCount ?? 0,
+    albumCount: g.albumCount ?? 0,
+  }));
+}
+
+export async function getSongsByGenre(
+  genre: string,
+  count: number = 50,
+  offset: number = 0,
+): Promise<Song[]> {
+  await getConfig();
+  const url = buildUrl('/rest/getSongsByGenre.view', {
+    genre,
+    count: String(count),
+    offset: String(offset),
+  });
+  const res = await fetch(url);
+  const data = await res.json();
+  const list = data?.['subsonic-response']?.songsByGenre?.song;
+  return (list ?? []).map(mapSong);
+}
+
 export async function getPlaylists(): Promise<Playlist[]> {
   await getConfig();
   const url = buildUrl('/rest/getPlaylists.view');
@@ -280,6 +320,7 @@ function mapSong(raw: any): Song {
     artist: raw.artist ?? '',
     album: raw.album ?? '',
     albumId: raw.albumId ?? '',
+    artistId: raw.artistId ?? '',
     coverArt: raw.coverArt ?? '',
     duration: raw.duration ?? 0,
     track: raw.track ?? 0,

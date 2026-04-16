@@ -7,6 +7,8 @@ import Artists from './pages/Artists';
 import ArtistDetail from './pages/ArtistDetail';
 import Songs from './pages/Songs';
 import Playlists from './pages/Playlists';
+import Genres from './pages/Genres';
+import GenreDetail from './pages/GenreDetail';
 import AlbumDetailPage from './pages/AlbumDetailPage';
 import PlaylistDetailPage from './pages/PlaylistDetailPage';
 import NowPlayingBar from './components/NowPlayingBar';
@@ -57,6 +59,8 @@ function AppContent() {
             <Route path="/artists" element={<Artists />} />
             <Route path="/artists/:id" element={<ArtistDetail />} />
             <Route path="/songs" element={<Songs />} />
+            <Route path="/genres" element={<Genres />} />
+            <Route path="/genres/:name" element={<GenreDetail />} />
             <Route path="/playlists" element={<Playlists />} />
             <Route path="/playlists/:id" element={<PlaylistDetailPage />} />
           </Routes>

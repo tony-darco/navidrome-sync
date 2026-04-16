@@ -1,16 +1,38 @@
 import { useState, useEffect, useCallback } from 'react';
 import * as api from '../api/navidrome';
 
+export function useGenres() {
+  const [genres, setGenres] = useState<api.Genre[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    api.getGenres().then((result) => {
+      if (!cancelled) {
+        setGenres(result.sort((a, b) => a.value.localeCompare(b.value)));
+      }
+    }).catch((e) => {
+      if (!cancelled) setError(e instanceof Error ? e.message : 'Failed to load genres');
+    }).finally(() => {
+      if (!cancelled) setLoading(false);
+    });
+    return () => { cancelled = true; };
+  }, []);
+
+  return { genres, loading, error };
+}
+
 export function useAlbums() {
   const [albums, setAlbums] = useState<api.Album[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const loadMore = useCallback(async (type = 'newest', size = 50, offset = 0) => {
+  const loadMore = useCallback(async (type = 'newest', size = 50, offset = 0, genre?: string) => {
     setLoading(true);
     setError(null);
     try {
-      const result = await api.getAlbums(type, size, offset);
+      const result = await api.getAlbums(type, size, offset, genre);
       if (offset > 0) {
         setAlbums((prev) => [...prev, ...result]);
       } else {
