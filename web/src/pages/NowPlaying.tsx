@@ -1,9 +1,11 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useSyncStore } from '../store/syncStore';
 import type { NowPlayingSong } from '../store/syncStore';
 import { getCoverArtUrl } from '../api/navidrome';
 import { getDominantColor, type RGB } from '../utils/dominantColor';
 import PlayHereButton from '../components/PlayHereButton';
+import AddToPlaylistModal from '../components/AddToPlaylistModal';
 
 function formatTime(secs: number) {
   const m = Math.floor(secs / 60);
@@ -27,7 +29,6 @@ function useDominantBg(coverArtId: string | undefined) {
 export default function NowPlaying() {
   const nowPlaying = useSyncStore((s) => s.nowPlaying);
   const myRole = useSyncStore((s) => s.myRole);
-  const lastSyncTime = useSyncStore((s) => s.lastSyncTime);
   const showQueue = useSyncStore((s) => s.showQueue);
   const bgStyle = useDominantBg(nowPlaying?.coverArtId);
 
@@ -50,7 +51,7 @@ export default function NowPlaying() {
   return myRole === 'active' ? (
     <ActiveView song={nowPlaying} bgStyle={bgStyle} />
   ) : (
-    <ObserverView song={nowPlaying} lastSyncTime={lastSyncTime} bgStyle={bgStyle} />
+    <ObserverView song={nowPlaying} bgStyle={bgStyle} />
   );
 }
 
@@ -87,6 +88,28 @@ function StarButton({ song }: { song: NowPlayingSong }) {
         <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" />
       </svg>
     </button>
+  );
+}
+
+/* ─── Add to playlist button ─── */
+function AddToPlaylistButton({ song }: { song: NowPlayingSong }) {
+  const [showModal, setShowModal] = useState(false);
+  return (
+    <>
+      <button
+        onClick={() => setShowModal(true)}
+        className="text-zinc-500 hover:text-white transition-colors"
+        aria-label="Add to playlist"
+        title="Add to playlist"
+      >
+        <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M13 7h-2v4H7v2h4v4h2v-4h4v-2h-4V7zm-1-5C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8z" />
+        </svg>
+      </button>
+      {showModal && (
+        <AddToPlaylistModal songId={song.songId} onClose={() => setShowModal(false)} />
+      )}
+    </>
   );
 }
 
@@ -238,6 +261,7 @@ function ActiveView({ song, bgStyle }: { song: NowPlayingSong; bgStyle: React.CS
   const toggleShuffle = useSyncStore((s) => s.toggleShuffle);
   const cycleRepeatMode = useSyncStore((s) => s.cycleRepeatMode);
   const [seekPos, setSeekPos] = useState<number | null>(null);
+  const navigate = useNavigate();
 
   return (
     <div className="h-full" style={bgStyle}>
@@ -250,9 +274,24 @@ function ActiveView({ song, bgStyle }: { song: NowPlayingSong; bgStyle: React.CS
       />
 
       <div className="text-center w-full px-4 flex-shrink-0">
-        <h2 className="text-xl sm:text-2xl font-bold truncate">{song.title}</h2>
-        <p className="text-base sm:text-lg text-zinc-400 truncate mt-0.5">{song.artist}</p>
-        <p className="text-sm text-zinc-500 truncate">{song.album}</p>
+        <h2
+          className={`text-xl sm:text-2xl font-bold truncate ${song.albumId ? 'cursor-pointer hover:underline' : ''}`}
+          onClick={() => song.albumId && navigate(`/albums/${song.albumId}`)}
+        >
+          {song.title}
+        </h2>
+        <p
+          className={`text-base sm:text-lg text-zinc-400 truncate mt-0.5 ${song.artistId ? 'cursor-pointer hover:underline' : ''}`}
+          onClick={() => song.artistId && navigate(`/artists/${song.artistId}`)}
+        >
+          {song.artist}
+        </p>
+        <p
+          className={`text-sm text-zinc-500 truncate ${song.albumId ? 'cursor-pointer hover:underline' : ''}`}
+          onClick={() => song.albumId && navigate(`/albums/${song.albumId}`)}
+        >
+          {song.album}
+        </p>
       </div>
 
       {/* Seek bar */}
@@ -270,7 +309,7 @@ function ActiveView({ song, bgStyle }: { song: NowPlayingSong; bgStyle: React.CS
           onMouseUp={(e) => { seek(Number((e.target as HTMLInputElement).value)); setSeekPos(null); }}
           onTouchStart={() => setSeekPos(position)}
           onTouchEnd={(e) => { seek(Number((e.target as HTMLInputElement).value)); setSeekPos(null); }}
-          className="flex-1 accent-accent"
+          className="flex-1 accent-accent outline-none"
         />
         <span className="text-xs text-zinc-500 tabular-nums w-10">
           {formatTime(song.durationSecs)}
@@ -335,6 +374,7 @@ function ActiveView({ song, bgStyle }: { song: NowPlayingSong; bgStyle: React.CS
 
       <div className="flex items-center gap-4 flex-shrink-0">
         <StarButton song={song} />
+        <AddToPlaylistButton song={song} />
         <span className="text-xs text-accent font-medium">Active Client</span>
         <QueueButton />
       </div>
@@ -346,36 +386,24 @@ function ActiveView({ song, bgStyle }: { song: NowPlayingSong; bgStyle: React.CS
 /* ─── Observer View ─── */
 function ObserverView({
   song,
-  lastSyncTime,
   bgStyle,
 }: {
   song: NowPlayingSong;
-  lastSyncTime: number;
   bgStyle: React.CSSProperties;
 }) {
   const isPlaying = useSyncStore((s) => s.isPlaying);
+  const position = useSyncStore((s) => s.position);
   const play = useSyncStore((s) => s.play);
   const pause = useSyncStore((s) => s.pause);
   const prev = useSyncStore((s) => s.prev);
   const next = useSyncStore((s) => s.next);
+  const seek = useSyncStore((s) => s.seek);
   const shuffle = useSyncStore((s) => s.shuffle);
   const repeatMode = useSyncStore((s) => s.repeatMode);
   const toggleShuffle = useSyncStore((s) => s.toggleShuffle);
   const cycleRepeatMode = useSyncStore((s) => s.cycleRepeatMode);
-  const [interpolatedPos, setInterpolatedPos] = useState(song.positionSecs);
-
-  // Interpolate position locally (only while playing)
-  useEffect(() => {
-    setInterpolatedPos(song.positionSecs);
-    if (!isPlaying) return;
-    const interval = setInterval(() => {
-      setInterpolatedPos((prev) => {
-        const next = prev + 1;
-        return next > song.durationSecs ? song.durationSecs : next;
-      });
-    }, 1000);
-    return () => clearInterval(interval);
-  }, [song.positionSecs, song.durationSecs, lastSyncTime, isPlaying]);
+  const [seekPos, setSeekPos] = useState<number | null>(null);
+  const navigate = useNavigate();
 
   return (
     <div className="h-full" style={bgStyle}>
@@ -387,22 +415,43 @@ function ObserverView({
       />
 
       <div className="text-center w-full px-4 flex-shrink-0">
-        <h2 className="text-xl sm:text-2xl font-bold truncate">{song.title}</h2>
-        <p className="text-base sm:text-lg text-zinc-400 truncate mt-0.5">{song.artist}</p>
-        <p className="text-sm text-zinc-500 truncate">{song.album}</p>
+        <h2
+          className={`text-xl sm:text-2xl font-bold truncate ${song.albumId ? 'cursor-pointer hover:underline' : ''}`}
+          onClick={() => song.albumId && navigate(`/albums/${song.albumId}`)}
+        >
+          {song.title}
+        </h2>
+        <p
+          className={`text-base sm:text-lg text-zinc-400 truncate mt-0.5 ${song.artistId ? 'cursor-pointer hover:underline' : ''}`}
+          onClick={() => song.artistId && navigate(`/artists/${song.artistId}`)}
+        >
+          {song.artist}
+        </p>
+        <p
+          className={`text-sm text-zinc-500 truncate ${song.albumId ? 'cursor-pointer hover:underline' : ''}`}
+          onClick={() => song.albumId && navigate(`/albums/${song.albumId}`)}
+        >
+          {song.album}
+        </p>
       </div>
 
-      {/* Read-only progress bar */}
+      {/* Seek bar */}
       <div className="w-full flex items-center gap-2 flex-shrink-0">
         <span className="text-xs text-zinc-500 tabular-nums w-10 text-right">
-          {formatTime(interpolatedPos)}
+          {formatTime(seekPos ?? position)}
         </span>
-        <div className="flex-1 h-1 bg-zinc-800 rounded-full overflow-hidden">
-          <div
-            className="h-full bg-zinc-500 rounded-full transition-all duration-1000"
-            style={{ width: `${(interpolatedPos / song.durationSecs) * 100}%` }}
-          />
-        </div>
+        <input
+          type="range"
+          min={0}
+          max={song.durationSecs}
+          value={seekPos ?? position}
+          onChange={(e) => setSeekPos(Number(e.target.value))}
+          onMouseDown={() => setSeekPos(position)}
+          onMouseUp={(e) => { seek(Number((e.target as HTMLInputElement).value)); setSeekPos(null); }}
+          onTouchStart={() => setSeekPos(position)}
+          onTouchEnd={(e) => { seek(Number((e.target as HTMLInputElement).value)); setSeekPos(null); }}
+          className="flex-1 accent-accent outline-none"
+        />
         <span className="text-xs text-zinc-500 tabular-nums w-10">
           {formatTime(song.durationSecs)}
         </span>
@@ -466,6 +515,7 @@ function ObserverView({
 
       <div className="flex items-center gap-4 flex-shrink-0">
         <StarButton song={song} />
+        <AddToPlaylistButton song={song} />
         <span className="text-xs text-zinc-500">Observing</span>
         <QueueButton />
         <PlayHereButton />

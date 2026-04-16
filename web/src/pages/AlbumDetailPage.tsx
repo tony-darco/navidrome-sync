@@ -11,6 +11,8 @@ function songToNowPlaying(song: Song) {
     title: song.title,
     artist: song.artist,
     album: song.album,
+    albumId: song.albumId,
+    artistId: song.artistId,
     coverArtId: song.coverArt,
     durationSecs: song.duration,
     positionSecs: 0,

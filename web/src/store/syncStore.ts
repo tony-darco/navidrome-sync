@@ -6,6 +6,8 @@ export interface NowPlayingSong {
   title: string;
   artist: string;
   album: string;
+  albumId?: string;
+  artistId?: string;
   coverArtId: string;
   durationSecs: number;
   positionSecs: number;
@@ -62,6 +64,7 @@ interface SyncState {
   }) => void;
   handleRoleChange: (payload: { clientId: string; role: 'active' | 'observer' }) => void;
   handleCommand: (payload: { action: string; positionSecs?: number; song?: NowPlayingSong; queue?: NowPlayingSong[]; startIndex?: number; queueIndex?: number }) => void;
+  handlePositionUpdate: (payload: { positionSecs: number }) => void;
   handleError: (payload: { code: string; message: string }) => void;
 
   /** Get the underlying HTMLAudioElement (for direct binding in AudioManager). */
@@ -248,6 +251,15 @@ export const useSyncStore = create<SyncState>((set, get) => ({
 
   handleError: (payload) => {
     console.error(`[sync] ${payload.code}: ${payload.message}`);
+  },
+
+  handlePositionUpdate: (payload) => {
+    if (get().myRole !== 'observer') return;
+    const np = get().nowPlaying;
+    set({
+      position: payload.positionSecs,
+      ...(np ? { nowPlaying: { ...np, positionSecs: payload.positionSecs } } : {}),
+    });
   },
 
   getAudio: () => audio,
@@ -505,6 +517,8 @@ export const useSyncStore = create<SyncState>((set, get) => ({
       title: s.title,
       artist: s.artist,
       album: s.album,
+      albumId: s.albumId,
+      artistId: s.artistId,
       coverArtId: s.coverArtId,
       durationSecs: s.durationSecs,
     }));

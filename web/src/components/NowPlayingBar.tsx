@@ -38,21 +38,33 @@ export default function NowPlayingBar() {
     <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 rounded-xl px-3 py-2 backdrop-blur-md max-w-lg w-[calc(100%-2rem)]"
       style={bg}
     >
-      {/* Cover + info — clickable to go to Now Playing */}
+      {/* Cover — clickable to go to Now Playing */}
       <button
         onClick={() => navigate('/')}
-        className="flex items-center gap-3 min-w-0 flex-1 cursor-pointer"
+        className="shrink-0 cursor-pointer"
       >
         <img
           src={getCoverArtUrl(nowPlaying.coverArtId, 80)}
           alt=""
-          className="w-11 h-11 rounded-lg object-cover bg-zinc-800 shrink-0"
+          className="w-11 h-11 rounded-lg object-cover bg-zinc-800"
         />
-        <div className="min-w-0 text-left">
-          <p className="text-sm font-semibold truncate text-white">{nowPlaying.title}</p>
-          <p className="text-xs truncate text-white/70">{nowPlaying.artist}</p>
-        </div>
       </button>
+
+      {/* Song info — title and artist are separate click targets */}
+      <div className="min-w-0 flex-1">
+        <p
+          className={`text-sm font-semibold truncate text-white ${nowPlaying.albumId ? 'cursor-pointer hover:underline' : ''}`}
+          onClick={() => nowPlaying.albumId && navigate(`/albums/${nowPlaying.albumId}`)}
+        >
+          {nowPlaying.title}
+        </p>
+        <p
+          className={`text-xs truncate text-white/70 ${nowPlaying.artistId ? 'cursor-pointer hover:underline' : ''}`}
+          onClick={() => nowPlaying.artistId && navigate(`/artists/${nowPlaying.artistId}`)}
+        >
+          {nowPlaying.artist}
+        </p>
+      </div>
 
       {/* Playback controls */}
       <div className="flex items-center gap-1 shrink-0">
