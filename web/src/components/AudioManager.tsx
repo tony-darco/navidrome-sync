@@ -32,9 +32,9 @@ export default function AudioManager() {
       const audio = getAudio();
       if (!audio.paused) {
         sendPositionUpdate(audio.currentTime);
-        // Scrobble at 50% of song duration
-        const { nowPlaying: np, scrobbledSongId } = useSyncStore.getState();
-        if (np && scrobbledSongId !== np.songId && np.durationSecs > 0 && audio.currentTime >= np.durationSecs / 2) {
+          // Scrobble at 30% of song duration
+          const { nowPlaying: np, scrobbledSongId } = useSyncStore.getState();
+          if (np && scrobbledSongId !== np.songId && np.durationSecs > 0 && audio.currentTime >= np.durationSecs * 0.3) {
           useSyncStore.setState({ scrobbledSongId: np.songId });
           apiScrobble(np.songId).catch(() => {});
         }
