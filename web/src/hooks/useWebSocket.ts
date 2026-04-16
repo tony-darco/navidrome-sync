@@ -12,6 +12,7 @@ export function useWebSocket() {
   const handleStateSync = useSyncStore((s) => s.handleStateSync);
   const handleRoleChange = useSyncStore((s) => s.handleRoleChange);
   const handleCommand = useSyncStore((s) => s.handleCommand);
+  const handlePositionUpdate = useSyncStore((s) => s.handlePositionUpdate);
   const handleError = useSyncStore((s) => s.handleError);
 
   useEffect(() => {
@@ -42,6 +43,9 @@ export function useWebSocket() {
               break;
             case 'COMMAND':
               handleCommand(envelope.payload);
+              break;
+            case 'POSITION_UPDATE':
+              handlePositionUpdate(envelope.payload);
               break;
             case 'PLAYLIST_INVALIDATE':
               useSyncStore.setState({ lastPlaylistInvalidation: envelope.payload });
@@ -90,5 +94,5 @@ export function useWebSocket() {
       wsRef.current?.close();
       wsRef.current = null;
     };
-  }, [myClientId, setConnected, setSendMessage, handleStateSync, handleRoleChange, handleCommand, handleError]);
+  }, [myClientId, setConnected, setSendMessage, handleStateSync, handleRoleChange, handleCommand, handlePositionUpdate, handleError]);
 }
