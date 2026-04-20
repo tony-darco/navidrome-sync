@@ -57,7 +57,11 @@ struct SongsView: View {
             }
 
             if !availableLetters.isEmpty {
-                AlphabetScrubber(letters: availableLetters, selectedLetter: $selectedLetter)
+                AlphabetScrubber(
+                    letters: availableLetters,
+                    activeLetters: Set(availableLetters),
+                    selectedLetter: $selectedLetter
+                )
             }
         }
         .background { store.dominantBackgroundColor.ignoresSafeArea() }

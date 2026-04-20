@@ -6,6 +6,8 @@ nonisolated struct NowPlayingSong: Codable, Equatable, Sendable {
     let title: String
     let artist: String
     let album: String
+    var albumId: String? = nil
+    var artistId: String? = nil
     let coverArtId: String
     let durationSecs: Int
     var positionSecs: Double

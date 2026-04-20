@@ -4,6 +4,7 @@ struct ContentView: View {
     @EnvironmentObject private var store: SyncStore
     @Binding var isLoggedIn: Bool
     @State private var selectedTab = 0
+    @State private var libraryPath = NavigationPath()
 
     var body: some View {
         ZStack(alignment: .bottom) {
@@ -15,15 +16,22 @@ struct ContentView: View {
                     }
                     .toolbarBackground(.visible, for: .tabBar)
 
-                LibraryView()
+                LibraryView(path: $libraryPath)
                     .tag(1)
                     .tabItem {
                         Label("Library", systemImage: "books.vertical")
                     }
                     .toolbarBackground(.visible, for: .tabBar)
 
-                SettingsView(isLoggedIn: $isLoggedIn)
+                SearchView()
                     .tag(2)
+                    .tabItem {
+                        Label("Search", systemImage: "magnifyingglass")
+                    }
+                    .toolbarBackground(.visible, for: .tabBar)
+
+                SettingsView(isLoggedIn: $isLoggedIn)
+                    .tag(3)
                     .tabItem {
                         Label("Settings", systemImage: "gear")
                     }
@@ -40,9 +48,10 @@ struct ContentView: View {
             if store.nowPlaying != nil && selectedTab != 0 {
                 NowPlayingBar(selectedTab: $selectedTab)
                     .padding(.bottom, 49) // tab bar height
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
             }
         }
-
+        .animation(.easeInOut(duration: 0.25), value: selectedTab)
     }
 }
 
@@ -51,35 +60,64 @@ struct ContentView: View {
 struct NowPlayingBar: View {
     @EnvironmentObject private var store: SyncStore
     @Binding var selectedTab: Int
+    @State private var showAlbumDetail = false
+    @State private var showArtistDetail = false
 
     var body: some View {
         if let song = store.nowPlaying {
             HStack(spacing: 12) {
-                // Tappable area — navigates to Now Playing
+                // Cover art — navigates to Now Playing tab
                 Button {
-                    selectedTab = 0
+                    withAnimation(.easeInOut(duration: 0.25)) {
+                        selectedTab = 0
+                    }
                 } label: {
-                    HStack(spacing: 12) {
-                        CoverArtImage(id: song.coverArtId, size: 80)
-                            .frame(width: 44, height: 44)
-                            .clipShape(RoundedRectangle(cornerRadius: 6))
+                    CoverArtImage(id: song.coverArtId, size: 80)
+                        .frame(width: 44, height: 44)
+                        .clipShape(RoundedRectangle(cornerRadius: 6))
+                }
+                .buttonStyle(.plain)
 
-                        VStack(alignment: .leading, spacing: 2) {
+                // Song info — title and artist are separate tap targets
+                VStack(alignment: .leading, spacing: 2) {
+                    if let albumId = song.albumId, !albumId.isEmpty {
+                        Button {
+                            showAlbumDetail = true
+                        } label: {
                             Text(song.title)
                                 .font(.subheadline)
                                 .fontWeight(.medium)
                                 .lineLimit(1)
                                 .foregroundStyle(.primary)
+                        }
+                        .buttonStyle(.plain)
+                    } else {
+                        Text(song.title)
+                            .font(.subheadline)
+                            .fontWeight(.medium)
+                            .lineLimit(1)
+                            .foregroundStyle(.primary)
+                    }
+
+                    if let artistId = song.artistId, !artistId.isEmpty {
+                        Button {
+                            showArtistDetail = true
+                        } label: {
                             Text(song.artist)
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                                 .lineLimit(1)
                         }
-
-                        Spacer()
+                        .buttonStyle(.plain)
+                    } else {
+                        Text(song.artist)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
                     }
                 }
-                .buttonStyle(.plain)
+
+                Spacer()
 
                 // Playback controls
                 Button {
@@ -113,6 +151,20 @@ struct NowPlayingBar: View {
             .padding(.vertical, 8)
             .background {
                 store.dominantBackgroundColor
+            }
+            .sheet(isPresented: $showAlbumDetail) {
+                if let albumId = song.albumId, !albumId.isEmpty {
+                    NavigationStack {
+                        AlbumDetailView(albumId: albumId)
+                    }
+                }
+            }
+            .sheet(isPresented: $showArtistDetail) {
+                if let artistId = song.artistId, !artistId.isEmpty {
+                    NavigationStack {
+                        ArtistDetailView(artistId: artistId, artistName: song.artist)
+                    }
+                }
             }
         }
     }

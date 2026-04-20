@@ -50,6 +50,8 @@ nonisolated struct NowPlayingPayload: Codable, Sendable {
     let title: String
     let artist: String
     let album: String
+    var albumId: String?
+    var artistId: String?
     let coverArtId: String
     let durationSecs: Int
     let positionSecs: Double
@@ -123,6 +125,8 @@ nonisolated struct QueueItemPayload: Codable, Sendable {
     let title: String
     let artist: String
     let album: String
+    var albumId: String?
+    var artistId: String?
     let coverArtId: String
     let durationSecs: Int
 
@@ -132,6 +136,8 @@ nonisolated struct QueueItemPayload: Codable, Sendable {
             title: title,
             artist: artist,
             album: album,
+            albumId: albumId,
+            artistId: artistId,
             coverArtId: coverArtId,
             durationSecs: durationSecs,
             positionSecs: 0,

@@ -62,6 +62,7 @@ nonisolated struct Song: Codable, Identifiable, Sendable {
     let artist: String
     let album: String
     let albumId: String
+    let artistId: String
     let coverArt: String
     let duration: Int
     let track: Int
@@ -70,7 +71,7 @@ nonisolated struct Song: Codable, Identifiable, Sendable {
     var isStarred: Bool { starred != nil }
 
     private enum CodingKeys: String, CodingKey {
-        case id, title, artist, album, albumId, coverArt, duration, track, starred
+        case id, title, artist, album, albumId, artistId, coverArt, duration, track, starred
     }
 
     init(from decoder: Decoder) throws {
@@ -80,18 +81,20 @@ nonisolated struct Song: Codable, Identifiable, Sendable {
         artist = (try? c.decode(String.self, forKey: .artist)) ?? ""
         album = (try? c.decode(String.self, forKey: .album)) ?? ""
         albumId = (try? c.decode(String.self, forKey: .albumId)) ?? ""
+        artistId = (try? c.decode(String.self, forKey: .artistId)) ?? ""
         coverArt = (try? c.decode(String.self, forKey: .coverArt)) ?? ""
         duration = (try? c.decode(Int.self, forKey: .duration)) ?? 0
         track = (try? c.decode(Int.self, forKey: .track)) ?? 0
         starred = try? c.decode(String.self, forKey: .starred)
     }
 
-    init(id: String, title: String, artist: String, album: String, albumId: String, coverArt: String, duration: Int, track: Int, starred: String? = nil) {
+    init(id: String, title: String, artist: String, album: String, albumId: String, artistId: String = "", coverArt: String, duration: Int, track: Int, starred: String? = nil) {
         self.id = id
         self.title = title
         self.artist = artist
         self.album = album
         self.albumId = albumId
+        self.artistId = artistId
         self.coverArt = coverArt
         self.duration = duration
         self.track = track
@@ -105,6 +108,8 @@ nonisolated struct Song: Codable, Identifiable, Sendable {
             title: title,
             artist: artist,
             album: album,
+            albumId: albumId,
+            artistId: artistId,
             coverArtId: coverArt,
             durationSecs: duration,
             positionSecs: 0,
@@ -132,6 +137,10 @@ nonisolated struct SubsonicResponse: Decodable, Sendable {
     let playlist: PlaylistWithSongs?
     let artists: ArtistsWrapper?
     let artist: ArtistDetail?
+    let genres: GenresWrapper?
+    let songsByGenre: SongsByGenreWrapper?
+    let artistInfo2: ArtistInfo2?
+    let topSongs: TopSongsWrapper?
 }
 
 nonisolated struct AlbumList2: Decodable, Sendable {
@@ -233,6 +242,12 @@ nonisolated struct ArtistID3: Codable, Identifiable, Sendable, Hashable {
         case id, name, albumCount
     }
 
+    init(id: String, name: String, albumCount: Int = 0) {
+        self.id = id
+        self.name = name
+        self.albumCount = albumCount
+    }
+
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         id = try c.decode(String.self, forKey: .id)
@@ -277,4 +292,51 @@ nonisolated struct ArtistDetail: Decodable, Sendable {
         name = (try? c.decode(String.self, forKey: .name)) ?? ""
         album = try? c.decode([Album].self, forKey: .album)
     }
+}
+
+// MARK: - Genre models
+
+nonisolated struct Genre: Codable, Identifiable, Sendable, Hashable {
+    let value: String
+    let songCount: Int
+    let albumCount: Int
+
+    var id: String { value }
+    var name: String { value }
+
+    private enum CodingKeys: String, CodingKey {
+        case value, songCount, albumCount
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        value = (try? c.decode(String.self, forKey: .value)) ?? ""
+        songCount = (try? c.decode(Int.self, forKey: .songCount)) ?? 0
+        albumCount = (try? c.decode(Int.self, forKey: .albumCount)) ?? 0
+    }
+}
+
+nonisolated struct GenresWrapper: Decodable, Sendable {
+    let genre: [Genre]?
+}
+
+nonisolated struct SongsByGenreWrapper: Decodable, Sendable {
+    let song: [Song]?
+}
+
+// MARK: - Artist info models
+
+nonisolated struct ArtistInfo2: Decodable, Sendable {
+    let biography: String?
+    let largeImageUrl: String?
+    let mediumImageUrl: String?
+    let smallImageUrl: String?
+
+    var imageURL: String? {
+        largeImageUrl ?? mediumImageUrl ?? smallImageUrl
+    }
+}
+
+nonisolated struct TopSongsWrapper: Decodable, Sendable {
+    let song: [Song]?
 }

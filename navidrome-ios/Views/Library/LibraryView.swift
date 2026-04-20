@@ -2,6 +2,7 @@ import SwiftUI
 
 struct LibraryView: View {
     @EnvironmentObject private var store: SyncStore
+    @Binding var path: NavigationPath
     @State private var recentAlbums: [Album] = []
     @State private var isLoading = false
 
@@ -10,6 +11,7 @@ struct LibraryView: View {
         ("music.mic", "Artists"),
         ("square.stack", "Albums"),
         ("music.note", "Songs"),
+        ("guitars", "Genres"),
     ]
 
     private let columns = [
@@ -18,7 +20,7 @@ struct LibraryView: View {
     ]
 
     var body: some View {
-        NavigationStack {
+        NavigationStack(path: $path) {
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
                     // Navigation rows
@@ -100,11 +102,15 @@ struct LibraryView: View {
                 case "Artists": ArtistsView()
                 case "Albums": AlbumsView()
                 case "Songs": SongsView()
+                case "Genres": GenresView()
                 default: EmptyView()
                 }
             }
             .navigationDestination(for: Album.self) { album in
                 AlbumDetailView(albumId: album.id)
+            }
+            .navigationDestination(for: ArtistID3.self) { artist in
+                ArtistDetailView(artistId: artist.id, artistName: artist.name)
             }
             .task {
                 await loadRecentAlbums()

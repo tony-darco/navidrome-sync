@@ -42,7 +42,6 @@ final class SyncStore: ObservableObject {
     let audioPlayer = AudioPlayer()
     private var positionReportingTask: Task<Void, Never>?
     private var cancellables = Set<AnyCancellable>()
-    private var interpolationTask: Task<Void, Never>?
     private var scrobbledSongId: String?
 
     // MARK: - Init
@@ -374,7 +373,6 @@ final class SyncStore: ObservableObject {
     /// Become the active client locally without waiting for sync service confirmation.
     private func becomeActiveLocally() {
         myRole = "active"
-        stopInterpolation()
         startPositionReporting()
     }
 
@@ -421,6 +419,8 @@ final class SyncStore: ObservableObject {
             title: song.title,
             artist: song.artist,
             album: song.album,
+            albumId: song.albumId,
+            artistId: song.artistId,
             coverArtId: song.coverArtId,
             durationSecs: song.durationSecs,
             positionSecs: song.positionSecs
@@ -435,6 +435,8 @@ final class SyncStore: ObservableObject {
                 title: $0.title,
                 artist: $0.artist,
                 album: $0.album,
+                albumId: $0.albumId,
+                artistId: $0.artistId,
                 coverArtId: $0.coverArtId,
                 durationSecs: $0.durationSecs
             )
@@ -464,11 +466,11 @@ final class SyncStore: ObservableObject {
                     type: .positionUpdate,
                     payload: PositionUpdatePayload(positionSecs: audioPlayer.currentTime)
                 )
-                // Scrobble at 50% of song duration
+                // Scrobble at 30% of song duration
                 if let song = nowPlaying,
                    scrobbledSongId != song.songId,
                    song.durationSecs > 0,
-                   audioPlayer.currentTime >= Double(song.durationSecs) / 2.0 {
+                   audioPlayer.currentTime >= Double(song.durationSecs) * 0.3 {
                     scrobbledSongId = song.songId
                     Task { try? await NavidromeClient.shared.scrobble(songId: song.songId) }
                 }
@@ -481,24 +483,6 @@ final class SyncStore: ObservableObject {
         positionReportingTask = nil
     }
 
-    // MARK: - Observer interpolation
-
-    private func startInterpolation() {
-        stopInterpolation()
-        interpolationTask = Task {
-            while !Task.isCancelled {
-                try? await Task.sleep(for: .seconds(1))
-                guard myRole == "observer", nowPlaying != nil, isPlaying else { continue }
-                position += 1
-            }
-        }
-    }
-
-    private func stopInterpolation() {
-        interpolationTask?.cancel()
-        interpolationTask = nil
-    }
-
     // MARK: - Incoming message routing
 
     private func handleMessage(_ envelope: SyncEnvelope) {
@@ -506,6 +490,11 @@ final class SyncStore: ObservableObject {
         case .stateSync:
             guard let payload = envelope.payload?.decode(StateSyncPayload.self) else { return }
             handleStateSync(payload)
+        case .positionUpdate:
+            if myRole == "observer",
+               let payload = envelope.payload?.decode(PositionUpdatePayload.self) {
+                position = payload.positionSecs
+            }
         case .command:
             guard let payload = envelope.payload?.decode(CommandPayload.self) else { return }
             handleCommand(payload)
@@ -573,7 +562,6 @@ final class SyncStore: ObservableObject {
                 if myRole == "observer" {
                     isPlaying = song.isPlaying == true
                     position = song.positionSecs
-                    startInterpolation()
                 }
             }
             
@@ -589,7 +577,6 @@ final class SyncStore: ObservableObject {
         } else {
             if myRole == "observer" || justBecameActive {
                 nowPlaying = nil
-                stopInterpolation()
             }
         }
     }
@@ -597,12 +584,10 @@ final class SyncStore: ObservableObject {
     private func handleRoleChange(_ payload: RoleChangePayload) {
         guard payload.clientId == myClientId else { return }
         myRole = payload.role
-        if payload.role == "observer" {
-            stopPositionReporting()
-            startInterpolation()
-        } else {
-            stopInterpolation()
+        if payload.role == "active" {
             startPositionReporting()
+        } else {
+            stopPositionReporting()
         }
     }
 

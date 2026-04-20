@@ -490,3 +490,111 @@ func TestActiveClientReconnects(t *testing.T) {
 		t.Fatalf("expected reconnected c1 to be active, got %s", payload["role"])
 	}
 }
+
+func TestPositionUpdateBroadcastsToObservers(t *testing.T) {
+	h := NewHub()
+	go h.Run()
+
+	c1 := createFakeClient("client-1", "")
+	c2 := createFakeClient("client-2", "")
+
+	h.register <- c1
+	readMessage(t, c1) // ROLE_CHANGE
+	readMessage(t, c1) // STATE_SYNC
+
+	h.register <- c2
+	readMessage(t, c2) // ROLE_CHANGE
+	readMessage(t, c2) // STATE_SYNC
+
+	// Set some song state first
+	sendInboundMsg(h, c1, MsgNowPlaying, map[string]interface{}{
+		"songId": "song-1", "title": "Test", "artist": "Artist", "durationSecs": float64(300),
+	})
+	readMessage(t, c1) // STATE_SYNC
+	readMessage(t, c2) // STATE_SYNC
+
+	// Active client sends a position update
+	sendInboundMsg(h, c1, MsgPositionUpdate, map[string]interface{}{
+		"positionSecs": float64(42.5),
+	})
+
+	// Observer (c2) should receive a POSITION_UPDATE message
+	msg := readMessage(t, c2)
+	if msg.Type != MsgPositionUpdate {
+		t.Fatalf("expected POSITION_UPDATE, got %s", msg.Type)
+	}
+	payload, ok := msg.Payload.(map[string]interface{})
+	if !ok {
+		t.Fatal("expected map payload")
+	}
+	if payload["positionSecs"] != float64(42.5) {
+		t.Errorf("expected positionSecs=42.5, got %v", payload["positionSecs"])
+	}
+
+	// Verify hub state was also updated
+	h.mu.RLock()
+	pos := h.state.PositionSecs
+	h.mu.RUnlock()
+	if pos != 42.5 {
+		t.Errorf("expected hub state position=42.5, got %f", pos)
+	}
+}
+
+func TestSeekUpdatesHubStateAndBroadcasts(t *testing.T) {
+	h := NewHub()
+	go h.Run()
+
+	c1 := createFakeClient("client-1", "")
+	c2 := createFakeClient("client-2", "")
+
+	h.register <- c1
+	readMessage(t, c1) // ROLE_CHANGE
+	readMessage(t, c1) // STATE_SYNC
+
+	h.register <- c2
+	readMessage(t, c2) // ROLE_CHANGE
+	readMessage(t, c2) // STATE_SYNC
+
+	// Set song state
+	sendInboundMsg(h, c1, MsgNowPlaying, map[string]interface{}{
+		"songId": "song-1", "title": "Test", "artist": "Artist", "durationSecs": float64(300),
+	})
+	readMessage(t, c1) // STATE_SYNC
+	readMessage(t, c2) // STATE_SYNC
+
+	// Observer sends SEEK — should be forwarded to active, state updated, and position broadcast
+	sendInboundMsg(h, c2, MsgSeek, map[string]interface{}{
+		"positionSecs": float64(120.0),
+	})
+
+	// Active client (c1) should receive a COMMAND with action=SEEK
+	cmdMsg := readMessage(t, c1)
+	if cmdMsg.Type != MsgCommand {
+		t.Fatalf("expected COMMAND, got %s", cmdMsg.Type)
+	}
+	cmdPayload, _ := cmdMsg.Payload.(map[string]interface{})
+	if cmdPayload["action"] != "SEEK" {
+		t.Errorf("expected action=SEEK, got %v", cmdPayload["action"])
+	}
+	if cmdPayload["positionSecs"] != float64(120.0) {
+		t.Errorf("expected positionSecs=120, got %v", cmdPayload["positionSecs"])
+	}
+
+	// Observer (c2) should receive a POSITION_UPDATE with the new position
+	posMsg := readMessage(t, c2)
+	if posMsg.Type != MsgPositionUpdate {
+		t.Fatalf("expected POSITION_UPDATE, got %s", posMsg.Type)
+	}
+	posPayload, _ := posMsg.Payload.(map[string]interface{})
+	if posPayload["positionSecs"] != float64(120.0) {
+		t.Errorf("expected positionSecs=120, got %v", posPayload["positionSecs"])
+	}
+
+	// Verify hub state was updated
+	h.mu.RLock()
+	pos := h.state.PositionSecs
+	h.mu.RUnlock()
+	if pos != 120.0 {
+		t.Errorf("expected hub state position=120, got %f", pos)
+	}
+}

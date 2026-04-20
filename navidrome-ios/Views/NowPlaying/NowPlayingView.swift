@@ -2,7 +2,10 @@ import SwiftUI
 
 struct NowPlayingView: View {
     @EnvironmentObject private var store: SyncStore
+    var onNavigateToAlbum: ((String) -> Void)? = nil
+    var onNavigateToArtist: ((String, String) -> Void)? = nil
     @State private var showQueue = false
+    @State private var showAddToPlaylist = false
 
     var body: some View {
         NavigationStack {
@@ -67,26 +70,66 @@ struct NowPlayingView: View {
 
             // Song info
             VStack(spacing: 6) {
-                Text(song.title)
-                    .font(.title2)
-                    .fontWeight(.bold)
-                    .lineLimit(1)
-                Text(song.artist)
-                    .font(.title3)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                Text(song.album)
-                    .font(.subheadline)
-                    .foregroundStyle(.tertiary)
-                    .lineLimit(1)
+                if let albumId = song.albumId, !albumId.isEmpty {
+                    Button { onNavigateToAlbum?(albumId) } label: {
+                        Text(song.title)
+                            .font(.title2)
+                            .fontWeight(.bold)
+                            .lineLimit(1)
+                    }
+                    .buttonStyle(.plain)
+                } else {
+                    Text(song.title)
+                        .font(.title2)
+                        .fontWeight(.bold)
+                        .lineLimit(1)
+                }
+
+                if let artistId = song.artistId, !artistId.isEmpty {
+                    Button { onNavigateToArtist?(artistId, song.artist) } label: {
+                        Text(song.artist)
+                            .font(.title3)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
+                    .buttonStyle(.plain)
+                } else {
+                    Text(song.artist)
+                        .font(.title3)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+
+                if let albumId = song.albumId, !albumId.isEmpty {
+                    Button { onNavigateToAlbum?(albumId) } label: {
+                        Text(song.album)
+                            .font(.subheadline)
+                            .foregroundStyle(.tertiary)
+                            .lineLimit(1)
+                    }
+                    .buttonStyle(.plain)
+                } else {
+                    Text(song.album)
+                        .font(.subheadline)
+                        .foregroundStyle(.tertiary)
+                        .lineLimit(1)
+                }
             }
             .padding(.horizontal)
 
-            // Star button
-            Button { store.toggleStar() } label: {
-                Image(systemName: song.starred == true ? "heart.fill" : "heart")
-                    .font(.title2)
-                    .foregroundStyle(song.starred == true ? .red : .secondary)
+            // Star + Add to playlist
+            HStack(spacing: 24) {
+                Button { store.toggleStar() } label: {
+                    Image(systemName: song.starred == true ? "heart.fill" : "heart")
+                        .font(.title2)
+                        .foregroundStyle(song.starred == true ? .red : .secondary)
+                }
+
+                Button { showAddToPlaylist = true } label: {
+                    Image(systemName: "plus.circle")
+                        .font(.title2)
+                        .foregroundStyle(.secondary)
+                }
             }
 
             // Progress
@@ -111,6 +154,9 @@ struct NowPlayingView: View {
         .sheet(isPresented: $showQueue) {
             QueueSheet()
                 .environmentObject(store)
+        }
+        .sheet(isPresented: $showAddToPlaylist) {
+            AddToPlaylistSheet(songId: song.songId)
         }
     }
 
@@ -144,22 +190,14 @@ struct NowPlayingView: View {
 
     private func observerProgressBar(_ song: NowPlayingSong) -> some View {
         VStack(spacing: 4) {
-            GeometryReader { geo in
-                ZStack(alignment: .leading) {
-                    Capsule()
-                        .fill(Color(.systemGray4))
-                        .frame(height: 4)
-                    Capsule()
-                        .fill(Color(.systemGray))
-                        .frame(
-                            width: song.durationSecs > 0
-                                ? geo.size.width * min(store.position / Double(song.durationSecs), 1)
-                                : 0,
-                            height: 4
-                        )
-                }
-            }
-            .frame(height: 4)
+            Slider(
+                value: Binding(
+                    get: { store.position },
+                    set: { store.seek(to: $0) }
+                ),
+                in: 0...max(Double(song.durationSecs), 1)
+            )
+            .tint(.white)
 
             HStack {
                 Text(formatTime(store.position))

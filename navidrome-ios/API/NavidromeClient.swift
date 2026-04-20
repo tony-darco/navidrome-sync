@@ -49,12 +49,14 @@ actor NavidromeClient {
 
     // MARK: - Album APIs
 
-    func getAlbums(type: String = "newest", size: Int = 50, offset: Int = 0) async throws -> [Album] {
-        let url = try buildURL(path: "/rest/getAlbumList2.view", params: [
+    func getAlbums(type: String = "newest", size: Int = 50, offset: Int = 0, genre: String? = nil) async throws -> [Album] {
+        var params = [
             "type": type,
             "size": String(size),
             "offset": String(offset),
-        ])
+        ]
+        if let genre { params["genre"] = genre }
+        let url = try buildURL(path: "/rest/getAlbumList2.view", params: params)
         let (data, _) = try await session.data(from: url)
         let wrapper = try JSONDecoder().decode(SubsonicWrapper.self, from: data)
         return wrapper.subsonicResponse.albumList2?.album ?? []
@@ -91,6 +93,26 @@ actor NavidromeClient {
         return wrapper.subsonicResponse.artists?.index ?? []
     }
 
+    // MARK: - Genre APIs
+
+    func getGenres() async throws -> [Genre] {
+        let url = try buildURL(path: "/rest/getGenres.view")
+        let (data, _) = try await session.data(from: url)
+        let wrapper = try JSONDecoder().decode(SubsonicWrapper.self, from: data)
+        return wrapper.subsonicResponse.genres?.genre ?? []
+    }
+
+    func getSongsByGenre(genre: String, count: Int = 50, offset: Int = 0) async throws -> [Song] {
+        let url = try buildURL(path: "/rest/getSongsByGenre.view", params: [
+            "genre": genre,
+            "count": String(count),
+            "offset": String(offset),
+        ])
+        let (data, _) = try await session.data(from: url)
+        let wrapper = try JSONDecoder().decode(SubsonicWrapper.self, from: data)
+        return wrapper.subsonicResponse.songsByGenre?.song ?? []
+    }
+
     func getArtist(id: String) async throws -> ArtistDetail {
         let url = try buildURL(path: "/rest/getArtist.view", params: ["id": id])
         let (data, _) = try await session.data(from: url)
@@ -99,6 +121,23 @@ actor NavidromeClient {
             throw NavidromeError.badResponse
         }
         return artist
+    }
+
+    func getArtistInfo2(id: String) async throws -> ArtistInfo2 {
+        let url = try buildURL(path: "/rest/getArtistInfo2.view", params: ["id": id])
+        let (data, _) = try await session.data(from: url)
+        let wrapper = try JSONDecoder().decode(SubsonicWrapper.self, from: data)
+        return wrapper.subsonicResponse.artistInfo2 ?? ArtistInfo2(biography: nil, largeImageUrl: nil, mediumImageUrl: nil, smallImageUrl: nil)
+    }
+
+    func getTopSongs(artistName: String, count: Int = 50) async throws -> [Song] {
+        let url = try buildURL(path: "/rest/getTopSongs.view", params: [
+            "artist": artistName,
+            "count": String(count),
+        ])
+        let (data, _) = try await session.data(from: url)
+        let wrapper = try JSONDecoder().decode(SubsonicWrapper.self, from: data)
+        return wrapper.subsonicResponse.topSongs?.song ?? []
     }
 
     // MARK: - Song APIs

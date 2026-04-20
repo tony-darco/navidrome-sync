@@ -55,6 +55,8 @@ type NowPlayingState struct {
 	Title        string  `json:"title,omitempty"`
 	Artist       string  `json:"artist,omitempty"`
 	Album        string  `json:"album,omitempty"`
+	AlbumID      string  `json:"albumId,omitempty"`
+	ArtistID     string  `json:"artistId,omitempty"`
 	CoverArtID   string  `json:"coverArtId,omitempty"`
 	DurationSecs int     `json:"durationSecs,omitempty"`
 	PositionSecs float64 `json:"positionSecs"`
@@ -79,6 +81,8 @@ type QueueItem struct {
 	Title        string `json:"title"`
 	Artist       string `json:"artist"`
 	Album        string `json:"album"`
+	AlbumID      string `json:"albumId,omitempty"`
+	ArtistID     string `json:"artistId,omitempty"`
 	CoverArtID   string `json:"coverArtId"`
 	DurationSecs int    `json:"durationSecs"`
 }
@@ -351,9 +355,9 @@ func (h *Hub) onNowPlaying(msg inboundMessage) {
 	h.broadcastStateSync()
 }
 
-// onPositionUpdate accepts a position report from the active client and updates
-// the hub state. This is sent periodically (~1s) by the active client so that
-// observers (and future CLAIM recipients) know the current playback position.
+// onPositionUpdate accepts a position report from the active client, updates
+// the hub state, and broadcasts the position to all observer clients so they
+// stay in sync without local interpolation.
 func (h *Hub) onPositionUpdate(msg inboundMessage) {
 	h.mu.Lock()
 	if msg.client.ID != h.activeClientID {
@@ -361,16 +365,19 @@ func (h *Hub) onPositionUpdate(msg inboundMessage) {
 		msg.client.sendError("NOT_ACTIVE", "only the active client may send position updates")
 		return
 	}
+	var pos float64
 	if h.state != nil {
 		if pm, ok := msg.envelope.Payload.(map[string]any); ok {
-			if pos, ok := pm["positionSecs"].(float64); ok {
-				h.state.PositionSecs = pos
+			if p, ok := pm["positionSecs"].(float64); ok {
+				h.state.PositionSecs = p
+				pos = p
 			}
 		}
 	}
 	h.mu.Unlock()
-	// No broadcast — observers interpolate locally. The next STATE_SYNC
-	// (on song change, claim, etc.) will carry the latest position.
+
+	// Broadcast the current position to all observer clients.
+	h.broadcastPositionToObservers(pos)
 }
 
 // onClaim lets any client claim the active role.
@@ -469,6 +476,19 @@ func (h *Hub) onTransportCommand(msg inboundMessage) {
 		if changed {
 			h.broadcastStateSync()
 		}
+	case MsgSeek:
+		var pos float64
+		h.mu.Lock()
+		if h.state != nil {
+			if pm, ok := msg.envelope.Payload.(map[string]any); ok {
+				if p, ok := pm["positionSecs"].(float64); ok {
+					h.state.PositionSecs = p
+					pos = p
+				}
+			}
+		}
+		h.mu.Unlock()
+		h.broadcastPositionToObservers(pos)
 	}
 }
 
@@ -552,6 +572,28 @@ func (h *Hub) buildStateSyncPayload() map[string]any {
 		"queueIndex":     h.queueIndex,
 		"shuffle":        h.shuffle,
 		"repeatMode":     h.repeatMode,
+	}
+}
+
+// broadcastPositionToObservers sends a lightweight POSITION_UPDATE to every
+// connected client except the active one.
+func (h *Hub) broadcastPositionToObservers(positionSecs float64) {
+	h.mu.RLock()
+	activeID := h.activeClientID
+	observers := make([]*Client, 0, len(h.clients))
+	for _, c := range h.clients {
+		if c.ID != activeID {
+			observers = append(observers, c)
+		}
+	}
+	h.mu.RUnlock()
+
+	env := Envelope{
+		Type:    MsgPositionUpdate,
+		Payload: map[string]any{"positionSecs": positionSecs},
+	}
+	for _, c := range observers {
+		c.sendJSON(env)
 	}
 }
 
