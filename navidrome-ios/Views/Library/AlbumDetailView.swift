@@ -4,6 +4,7 @@ struct AlbumDetailView: View {
     let albumId: String
 
     @EnvironmentObject private var store: SyncStore
+    @EnvironmentObject private var downloadManager: DownloadManager
     @State private var album: Album?
     @State private var songs: [Song] = []
     @State private var isLoading = true
@@ -102,6 +103,17 @@ struct AlbumDetailView: View {
                         .clipShape(Capsule())
                 }
                 .buttonStyle(.plain)
+
+                Button {
+                    downloadManager.download(songs: songs)
+                } label: {
+                    Image(systemName: "arrow.down.circle")
+                        .font(.title3)
+                        .frame(width: 44, height: 44)
+                        .background(Color(.systemGray5))
+                        .clipShape(Circle())
+                }
+                .buttonStyle(.plain)
             }
             .padding(.top, 4)
         }
@@ -131,7 +143,10 @@ struct AlbumDetailView: View {
                 }
                 .buttonStyle(.plain)
                 .overlay(alignment: .trailing) {
-                    songMenu(index: index, song: song)
+                    HStack(spacing: 6) {
+                        DownloadStatusIcon(task: downloadManager.taskMap[song.id])
+                        songMenu(index: index, song: song)
+                    }
                 }
                 .padding(.vertical, 10)
                 .padding(.horizontal)
@@ -156,6 +171,20 @@ struct AlbumDetailView: View {
                 store.appendToQueue(song.toNowPlayingSong())
             } label: {
                 Label("Add to Queue", systemImage: "text.badge.plus")
+            }
+            Divider()
+            if downloadManager.isDownloaded(songId: song.id) {
+                Button(role: .destructive) {
+                    downloadManager.remove(songId: song.id)
+                } label: {
+                    Label("Remove Download", systemImage: "trash")
+                }
+            } else {
+                Button {
+                    downloadManager.download(song: song)
+                } label: {
+                    Label("Download", systemImage: "arrow.down.circle")
+                }
             }
         } label: {
             Image(systemName: "ellipsis")

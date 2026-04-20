@@ -15,10 +15,6 @@ struct ArtistRowView: View {
                     .lineLimit(1)
 
                 Spacer()
-
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 13, weight: .medium))
-                    .foregroundStyle(Color(white: 0.4))
             }
             .padding(.leading, 16)
             .padding(.trailing, 30)

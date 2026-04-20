@@ -2,6 +2,7 @@ import SwiftUI
 
 struct ContentView: View {
     @EnvironmentObject private var store: SyncStore
+    @EnvironmentObject private var downloadManager: DownloadManager
     @Binding var isLoggedIn: Bool
     @State private var selectedTab = 0
     @State private var libraryPath = NavigationPath()
@@ -49,6 +50,26 @@ struct ContentView: View {
                 NowPlayingBar(selectedTab: $selectedTab)
                     .padding(.bottom, 49) // tab bar height
                     .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
+
+            // Offline mode banner
+            if AppConfig.offlineMode {
+                VStack {
+                    HStack(spacing: 6) {
+                        Image(systemName: "wifi.slash")
+                            .font(.caption)
+                        Text("Offline Mode")
+                            .font(.caption)
+                            .fontWeight(.medium)
+                    }
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 4)
+                    .background(Color.orange.opacity(0.9))
+                    .clipShape(Capsule())
+                    Spacer()
+                }
+                .padding(.top, 4)
             }
         }
         .animation(.easeInOut(duration: 0.25), value: selectedTab)

@@ -6,6 +6,7 @@ struct PlaylistDetailView: View {
 
     @EnvironmentObject private var store: SyncStore
     @EnvironmentObject private var playlistStore: PlaylistStore
+    @EnvironmentObject private var downloadManager: DownloadManager
     @State private var playlist: PlaylistWithSongs?
     @State private var isLoading = true
     @State private var showEditView = false
@@ -121,6 +122,18 @@ struct PlaylistDetailView: View {
                         .clipShape(Capsule())
                 }
                 .buttonStyle(.plain)
+
+                Button {
+                    let entries = playlist.entry ?? []
+                    downloadManager.download(songs: entries)
+                } label: {
+                    Image(systemName: "arrow.down.circle")
+                        .font(.title3)
+                        .frame(width: 44, height: 44)
+                        .background(Color(.systemGray5))
+                        .clipShape(Circle())
+                }
+                .buttonStyle(.plain)
             }
             .padding(.top, 4)
         }
@@ -155,7 +168,10 @@ struct PlaylistDetailView: View {
                 }
                 .buttonStyle(.plain)
                 .overlay(alignment: .trailing) {
-                    songMenu(index: index, song: song, entries: entries)
+                    HStack(spacing: 6) {
+                        DownloadStatusIcon(task: downloadManager.taskMap[song.id])
+                        songMenu(index: index, song: song, entries: entries)
+                    }
                 }
                 .padding(.vertical, 6)
                 .padding(.horizontal)
@@ -181,6 +197,21 @@ struct PlaylistDetailView: View {
             } label: {
                 Label("Add to Queue", systemImage: "text.badge.plus")
             }
+            Divider()
+            if downloadManager.isDownloaded(songId: song.id) {
+                Button(role: .destructive) {
+                    downloadManager.remove(songId: song.id)
+                } label: {
+                    Label("Remove Download", systemImage: "trash")
+                }
+            } else {
+                Button {
+                    downloadManager.download(song: song)
+                } label: {
+                    Label("Download", systemImage: "arrow.down.circle")
+                }
+            }
+            Divider()
             Button(role: .destructive) {
                 Task {
                     try? await NavidromeClient.shared.updatePlaylist(

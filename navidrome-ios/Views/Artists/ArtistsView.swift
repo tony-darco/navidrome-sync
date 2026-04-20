@@ -122,13 +122,13 @@ struct ArtistsView: View {
                         ForEach(displayedSections) { section in
                             Section(header: sectionHeader(for: section.name).id(section.name)) {
                                 ForEach(section.artists) { artist in
-                                    NavigationLink(value: artist) {
-                                        ArtistRowView(artist: artist)
-                                    }
-                                    .buttonStyle(.plain)
-                                    .listRowInsets(EdgeInsets())
-                                    .listRowSeparator(.hidden)
-                                    .listRowBackground(Color.black)
+                                    ArtistRowView(artist: artist)
+                                        .background {
+                                            NavigationLink(value: artist) { EmptyView() }.opacity(0)
+                                        }
+                                        .listRowInsets(EdgeInsets())
+                                        .listRowSeparator(.hidden)
+                                        .listRowBackground(Color.black)
                                 }
                             }
                         }
@@ -201,7 +201,8 @@ struct ArtistsView: View {
         .padding(.leading, 16)
         .padding(.trailing, 30)
         .padding(.vertical, 6)
-        .background(Color.black)
+        .listRowInsets(EdgeInsets())
+        .background(.ultraThinMaterial.opacity(0.8))
     }
 
     private var searchBar: some View {

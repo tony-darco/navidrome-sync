@@ -12,6 +12,7 @@ struct LibraryView: View {
         ("square.stack", "Albums"),
         ("music.note", "Songs"),
         ("guitars", "Genres"),
+        ("arrow.down.circle", "Downloads"),
     ]
 
     private let columns = [
@@ -103,6 +104,7 @@ struct LibraryView: View {
                 case "Albums": AlbumsView()
                 case "Songs": SongsView()
                 case "Genres": GenresView()
+                case "Downloads": DownloadsView()
                 default: EmptyView()
                 }
             }

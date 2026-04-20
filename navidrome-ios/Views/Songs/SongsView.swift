@@ -2,6 +2,7 @@ import SwiftUI
 
 struct SongsView: View {
     @EnvironmentObject private var store: SyncStore
+    @EnvironmentObject private var downloadManager: DownloadManager
     @State private var songs: [Song] = []
     @State private var isLoading = false
     @State private var fullyLoaded = false
@@ -30,6 +31,32 @@ struct SongsView: View {
                             ForEach(group.songs) { song in
                                 Button { playSong(song) } label: {
                                     songRow(song)
+                                }
+                                .contextMenu {
+                                    Button {
+                                        playSong(song)
+                                    } label: {
+                                        Label("Play", systemImage: "play.fill")
+                                    }
+                                    Button {
+                                        store.appendToQueue(song.toNowPlayingSong())
+                                    } label: {
+                                        Label("Add to Queue", systemImage: "text.badge.plus")
+                                    }
+                                    Divider()
+                                    if downloadManager.isDownloaded(songId: song.id) {
+                                        Button(role: .destructive) {
+                                            downloadManager.remove(songId: song.id)
+                                        } label: {
+                                            Label("Remove Download", systemImage: "trash")
+                                        }
+                                    } else {
+                                        Button {
+                                            downloadManager.download(song: song)
+                                        } label: {
+                                            Label("Download", systemImage: "arrow.down.circle")
+                                        }
+                                    }
                                 }
                                 .listRowBackground(Color.clear)
                             }
@@ -86,6 +113,7 @@ struct SongsView: View {
                     .lineLimit(1)
             }
             Spacer()
+            DownloadStatusIcon(task: downloadManager.taskMap[song.id])
             Text(formatDuration(song.duration))
                 .font(.caption)
                 .foregroundStyle(.secondary)
