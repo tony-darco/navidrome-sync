@@ -72,6 +72,32 @@ nonisolated enum AppConfig {
         set { defaults.set(newValue, forKey: "coloredPlaylistBackground") }
     }
 
+    // MARK: - Downloads
+
+    /// Whether offline mode is enabled (only play downloaded content).
+    static var offlineMode: Bool {
+        get { defaults.object(forKey: "offlineMode") as? Bool ?? false }
+        set { defaults.set(newValue, forKey: "offlineMode") }
+    }
+
+    /// Whether to automatically cache songs after playback (at scrobble time).
+    static var autoCacheEnabled: Bool {
+        get { defaults.object(forKey: "autoCacheEnabled") as? Bool ?? false }
+        set { defaults.set(newValue, forKey: "autoCacheEnabled") }
+    }
+
+    /// Maximum auto-cache storage in bytes. 0 = unlimited. Default 1 GB.
+    static var maxCacheSize: Int64 {
+        get { defaults.object(forKey: "maxCacheSize") as? Int64 ?? 1_073_741_824 }
+        set { defaults.set(newValue, forKey: "maxCacheSize") }
+    }
+
+    /// Download quality as maxBitRate param for stream.view. 0 = original quality.
+    static var downloadQuality: Int {
+        get { defaults.object(forKey: "downloadQuality") as? Int ?? 0 }
+        set { defaults.set(newValue, forKey: "downloadQuality") }
+    }
+
     /// Clear all stored credentials and server info.
     static func logout() {
         serverURL = nil
