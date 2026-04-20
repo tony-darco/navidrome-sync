@@ -5,6 +5,7 @@ struct ArtistDetailView: View {
     let artistName: String
 
     @EnvironmentObject private var store: SyncStore
+    @EnvironmentObject private var downloadManager: DownloadManager
 
     @State private var albums: [Album] = []
     @State private var topSongs: [Song] = []
@@ -149,8 +150,33 @@ struct ArtistDetailView: View {
 
             Spacer()
 
-            Button {
-                // context menu placeholder
+            DownloadStatusIcon(task: downloadManager.taskMap[song.id])
+
+            Menu {
+                Button {
+                    playSong(song, at: topSongs.firstIndex(where: { $0.id == song.id }) ?? 0)
+                } label: {
+                    Label("Play", systemImage: "play.fill")
+                }
+                Button {
+                    store.appendToQueue(song.toNowPlayingSong())
+                } label: {
+                    Label("Add to Queue", systemImage: "text.badge.plus")
+                }
+                Divider()
+                if downloadManager.isDownloaded(songId: song.id) {
+                    Button(role: .destructive) {
+                        downloadManager.remove(songId: song.id)
+                    } label: {
+                        Label("Remove Download", systemImage: "trash")
+                    }
+                } else {
+                    Button {
+                        downloadManager.download(song: song)
+                    } label: {
+                        Label("Download", systemImage: "arrow.down.circle")
+                    }
+                }
             } label: {
                 Image(systemName: "ellipsis")
                     .foregroundStyle(.secondary)
