@@ -1,0 +1,7 @@
+{
+  "type": "COMMAND",
+  "payload": {
+    "action": "SEEK",
+    "positionSecs": 120.5
+  }
+}

@@ -1,0 +1,54 @@
+{
+  "type": "STATE_SYNC",
+  "payload": {
+    "activeClientId": "client-abc",
+    "song": {
+      "songId": "s-001",
+      "title": "Opening",
+      "artist": "The Wanderers",
+      "album": "Midnight Tales",
+      "albumId": "al-001",
+      "artistId": "ar-001",
+      "coverArtId": "al-001",
+      "durationSecs": 245,
+      "positionSecs": 42.5,
+      "isPlaying": true,
+      "starred": false
+    },
+    "clients": [
+      {
+        "clientId": "client-abc",
+        "clientType": "web",
+        "role": "active"
+      },
+      {
+        "clientId": "client-def",
+        "clientType": "ios",
+        "role": "observer"
+      }
+    ],
+    "queue": [
+      {
+        "songId": "s-001",
+        "title": "Opening",
+        "artist": "The Wanderers",
+        "album": "Midnight Tales",
+        "albumId": "al-001",
+        "artistId": "ar-001",
+        "coverArtId": "al-001",
+        "durationSecs": 245
+      },
+      {
+        "songId": "s-002",
+        "title": "Closing Time",
+        "artist": "The Wanderers",
+        "album": "Midnight Tales",
+        "coverArtId": "al-001",
+        "durationSecs": 302
+      }
+    ],
+    "queueIndex": 0,
+    "shuffle": false,
+    "repeatMode": "off"
+  }
+}

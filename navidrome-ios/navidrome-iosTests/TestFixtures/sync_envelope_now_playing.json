@@ -1,0 +1,15 @@
+{
+  "type": "NOW_PLAYING",
+  "clientId": "client-abc",
+  "payload": {
+    "songId": "s-001",
+    "title": "Opening",
+    "artist": "The Wanderers",
+    "album": "Midnight Tales",
+    "albumId": "al-001",
+    "artistId": "ar-001",
+    "coverArtId": "al-001",
+    "durationSecs": 245,
+    "positionSecs": 0.0
+  }
+}
