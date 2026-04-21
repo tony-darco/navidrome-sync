@@ -1,135 +1,249 @@
 import SwiftUI
 
+// MARK: - LibraryView
+
 struct LibraryView: View {
     @EnvironmentObject private var store: SyncStore
-    @State private var recentAlbums: [Album] = []
-    @State private var isLoading = false
+    @Environment(AppNavigationState.self) private var nav
+    @Environment(CrateColorState.self) private var crateState
 
-    private let libraryRows: [(icon: String, title: String)] = [
-        ("music.note.list", "Playlists"),
-        ("music.mic", "Artists"),
-        ("square.stack", "Albums"),
-        ("music.note", "Songs"),
-        ("guitars", "Genres"),
-        ("arrow.down.circle", "Downloads"),
-    ]
+    @State private var showGenres   = false
+    @State private var showDownloads = false
 
-    private let columns = [
-        GridItem(.flexible(), spacing: 16),
-        GridItem(.flexible(), spacing: 16),
-    ]
+    // Section counts (loaded on appear)
+    @State private var albumCount:    Int = 0
+    @State private var songCount:     Int = 0
+    @State private var artistCount:   Int = 0
+    @State private var playlistCount: Int = 0
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 0) {
-                // Navigation rows
+        GeometryReader { geo in
+            ZStack(alignment: .bottomLeading) {
                 VStack(spacing: 0) {
-                    ForEach(libraryRows, id: \.title) { row in
-                        NavigationLink(value: row.title) {
-                            HStack {
-                                Image(systemName: row.icon)
-                                    .foregroundColor(Color.brandPink)
-                                    .font(.title2)
-                                    .frame(width: 32, height: 32)
-                                Text(row.title)
-                                    .font(.title3)
-                                    .foregroundColor(.primary)
-                                Spacer()
-                                Image(systemName: "chevron.right")
-                                    .foregroundColor(.secondary)
-                                    .font(.body)
-                            }
-                            .padding(.vertical, 8)
-                            .padding(.horizontal, 0)
-                            .contentShape(Rectangle())
-                        }
-                        .buttonStyle(.plain)
-                        if row.title != libraryRows.last?.title {
-                            Divider().padding(.leading, 48)
-                        }
-                    }
+                    graphicZone(height: geo.size.height * 0.55)
+                    bodyZone(height:   geo.size.height * 0.45)
                 }
-                .padding(.horizontal)
-                .padding(.top, 4)
 
-                // Recently Added
-                if !recentAlbums.isEmpty {
-                    Text("Recently Added")
-                        .font(.title2)
-                        .fontWeight(.bold)
-                        .foregroundColor(.primary)
-                        .padding(.horizontal, 16)
-                        .padding(.top, 24)
-                        .padding(.bottom, 8)
-
-                    LazyVGrid(columns: columns, spacing: 16) {
-                        ForEach(recentAlbums) { album in
-                            NavigationLink(value: album) {
-                                VStack(alignment: .leading, spacing: 4) {
-                                    CoverArtImage(id: album.coverArt, size: 300)
-                                        .aspectRatio(1, contentMode: .fit)
-                                        .clipShape(RoundedRectangle(cornerRadius: 8))
-
-                                    Text(album.name)
-                                        .font(.caption)
-                                        .fontWeight(.medium)
-                                        .foregroundColor(.primary)
-                                        .lineLimit(1)
-
-                                    Text(album.artist)
-                                        .font(.caption2)
-                                        .foregroundColor(.secondary)
-                                        .lineLimit(1)
-                                }
-                            }
-                            .buttonStyle(.plain)
-                        }
-                    }
-                    .padding(.horizontal, 16)
-                }
+                NavPopoverView(
+                    isVisible: Binding(
+                        get: { nav.isPopoverVisible },
+                        set: { nav.isPopoverVisible = $0 }
+                    ),
+                    crate: crateState.current,
+                    onNavigate: { nav.handlePopoverSelection($0) }
+                )
             }
         }
-        .background {
-            store.dominantBackgroundColor
-                .ignoresSafeArea()
+        .ignoresSafeArea()
+        .fullScreenCover(isPresented: $showGenres) {
+            NavigationStack { GenresView() }
+                .environmentObject(store)
         }
-        .navigationTitle("Library")
-        .navigationBarTitleDisplayMode(.large)
-        .navigationDestination(for: String.self) { destination in
-            switch destination {
-            case "Playlists": PlaylistsView()
-            case "Artists": ArtistsView()
-            case "Albums": AlbumsView()
-            case "Songs": SongsView()
-            case "Genres": GenresView()
-            case "Downloads": DownloadsView()
-            default: EmptyView()
+        .fullScreenCover(isPresented: $showDownloads) {
+            NavigationStack { DownloadsView() }
+                .environmentObject(store)
+        }
+        .task { await loadCounts() }
+    }
+
+    // MARK: - Graphic zone (top 55%)
+
+    @ViewBuilder
+    private func graphicZone(height: CGFloat) -> some View {
+        ZStack {
+            // Dark crate artBg
+            Rectangle().fill(crateState.current.artBg)
+
+            // Vinyl texture watermark at 8% opacity
+            VinylFallbackView(crate: crateState.current, size: height)
+                .opacity(0.08)
+                .allowsHitTesting(false)
+
+            // Section bands + mini strip pushed to bottom
+            VStack(spacing: 0) {
+                Spacer(minLength: 0)
+
+                sectionBand(icon: "square.stack",    label: "Albums",    count: albumCount,    dest: .albums)
+                Divider().background(DesignBorder.onDark)
+                sectionBand(icon: "music.note.list", label: "Playlists", count: playlistCount, dest: .playlists)
+                Divider().background(DesignBorder.onDark)
+                sectionBand(icon: "music.mic",       label: "Artists",   count: artistCount,   dest: .artists)
+                Divider().background(DesignBorder.onDark)
+                sectionBand(icon: "music.note",      label: "Songs",     count: songCount,     dest: .songs)
+                Divider().background(DesignBorder.onDark)
+                secondaryBand(icon: "guitars",             label: "Genres")    { showGenres    = true }
+                Divider().background(DesignBorder.onDark)
+                secondaryBand(icon: "arrow.down.circle",  label: "Downloads") { showDownloads = true }
+
+                MiniTrackStripView(onTap: { nav.navigate(to: .nowPlaying) })
+                    .environmentObject(store)
             }
         }
-        .navigationDestination(for: Album.self) { album in
-            AlbumDetailView(albumId: album.id)
+        .frame(height: height)
+    }
+
+    // MARK: - Section band (primary nav row)
+
+    private func sectionBand(icon: String, label: String, count: Int, dest: AppView) -> some View {
+        Button { nav.navigate(to: dest) } label: {
+            HStack(spacing: DesignSpacing.md) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: DesignRadius.sm)
+                        .fill(crateState.current.outer)
+                        .frame(width: 30, height: 30)
+                    Image(systemName: icon)
+                        .font(.system(size: 14))
+                        .foregroundStyle(crateState.current.accent)
+                }
+
+                Text(label)
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(DesignText.onDark)
+
+                Spacer()
+
+                if count > 0 {
+                    Text("\(count)")
+                        .font(.system(size: 11, design: .monospaced))
+                        .foregroundStyle(DesignText.onDarkMuted)
+                }
+
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(DesignText.onDarkMuted)
+            }
+            .padding(.horizontal, DesignSpacing.lg)
+            .frame(height: 44)
+            .contentShape(Rectangle())
         }
-        .navigationDestination(for: ArtistID3.self) { artist in
-            ArtistDetailView(artistId: artist.id, artistName: artist.name)
+        .buttonStyle(.plain)
+    }
+
+    // MARK: - Secondary band (Genres / Downloads)
+
+    private func secondaryBand(icon: String, label: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: DesignSpacing.md) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: DesignRadius.sm)
+                        .fill(crateState.current.outer)
+                        .frame(width: 30, height: 30)
+                    Image(systemName: icon)
+                        .font(.system(size: 14))
+                        .foregroundStyle(crateState.current.accent)
+                }
+
+                Text(label)
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(DesignText.onDark)
+
+                Spacer()
+
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(DesignText.onDarkMuted)
+            }
+            .padding(.horizontal, DesignSpacing.lg)
+            .frame(height: 44)
+            .contentShape(Rectangle())
         }
-        .task {
-            await loadRecentAlbums()
+        .buttonStyle(.plain)
+    }
+
+    // MARK: - Body zone (bottom 45%)
+
+    @ViewBuilder
+    private func bodyZone(height: CGFloat) -> some View {
+        ZStack(alignment: .bottom) {
+            Rectangle().fill(crateState.current.device)
+
+            VStack(spacing: DesignSpacing.md) {
+                Spacer(minLength: DesignSpacing.lg)
+
+                ClickWheelView(
+                    crate:       crateState.current,
+                    onCenterTap: {
+                        if store.isPlaying { store.pause() } else { store.play() }
+                    },
+                    onTopTap:    { },
+                    onBottomTap: { },
+                    onLeftTap:   { store.prev() },
+                    onRightTap:  { store.next() },
+                    onScrub: { fraction in
+                        guard let song = store.nowPlaying else { return }
+                        store.seek(to: fraction * Double(song.durationSecs))
+                    }
+                )
+
+                navDots
+
+                Spacer(minLength: DesignSpacing.xxl)
+            }
+
+            bottomBar
+        }
+        .frame(height: height)
+    }
+
+    // MARK: - Nav dots (Library = active)
+
+    private var navDots: some View {
+        // 5 dots: nowPlaying, library, albums, search, settings
+        let items: [(AppView, Int)] = [
+            (.nowPlaying, 0), (.library, 1), (.albums, 2), (.search, 3), (.settings, 4)
+        ]
+        return HStack(spacing: 5) {
+            ForEach(items, id: \.0) { view, idx in
+                let isActive = view == .library
+                Circle()
+                    .fill(getCrateColor(albumId: String(idx)).dot)
+                    .opacity(isActive ? 1.0 : 0.5)
+                    .frame(width: isActive ? 9 : 6, height: isActive ? 9 : 6)
+            }
         }
     }
 
-    private func loadRecentAlbums() async {
-        guard recentAlbums.isEmpty else { return }
-        isLoading = true
-        defer { isLoading = false }
-        do {
-            recentAlbums = try await NavidromeClient.shared.getAlbums(type: "newest", size: 20)
-        } catch {
-            print("[library] failed to load recent albums: \(error)")
+    // MARK: - Bottom bar
+
+    private var bottomBar: some View {
+        HStack {
+            Button { nav.isPopoverVisible = true } label: {
+                Image(systemName: "line.3.horizontal")
+                    .font(.system(size: 16, weight: .medium))
+                    .foregroundStyle(crateState.current.text)
+                    .frame(width: 32, height: 32)
+            }
+            .buttonStyle(.plain)
+
+            Spacer()
+
+            Text("navidrome-sync")
+                .font(.system(size: 11, weight: .semibold))
+                .tracking(DesignType.tracking(from: DesignType.sectionLabel))
+                .textCase(.uppercase)
+                .foregroundStyle(crateState.current.text)
         }
+        .padding(.horizontal, DesignSpacing.lg)
+        .padding(.bottom, DesignSpacing.md)
+    }
+
+    // MARK: - Count loading
+
+    private func loadCounts() async {
+        async let al = try? NavidromeClient.shared.getAlbums(type: "alphabeticalByName", size: 500)
+        async let ar = try? NavidromeClient.shared.getArtists()
+        async let so = try? NavidromeClient.shared.getSongs(count: 500)
+        async let pl = try? NavidromeClient.shared.getPlaylists()
+
+        albumCount    = (await al)?.count ?? 0
+        artistCount   = (await ar)?.flatMap(\.artist).count ?? 0
+        songCount     = (await so)?.count ?? 0
+        playlistCount = (await pl)?.count ?? 0
     }
 }
 
-// Make Album Hashable for NavigationLink value
+// MARK: - Album Hashable (required for NavigationLink value in detail views)
+
 extension Album: Hashable {
     static func == (lhs: Album, rhs: Album) -> Bool { lhs.id == rhs.id }
     func hash(into hasher: inout Hasher) { hasher.combine(id) }
