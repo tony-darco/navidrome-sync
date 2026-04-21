@@ -8,6 +8,7 @@ DST="/Users/tdarco/Documents/Projects/navidrome/navidrome-ios/navidrome-ios"
 # Use rsync to mirror the entire directory, preserving structure.
 # --delete removes files in DST that no longer exist in SRC.
 rsync -av --delete \
+  --exclude='*navidrome-iosTests/*'\
   --include='*.swift' \
   --include='*.plist' \
   --include='*.json' \
