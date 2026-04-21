@@ -2,13 +2,18 @@ import Foundation
 
 /// Manages the WebSocket connection to the Go sync service.
 /// Uses native URLSessionWebSocketTask — no third-party dependencies.
-nonisolated final class SyncClient: @unchecked Sendable {
-    private var webSocket: URLSessionWebSocketTask?
-    private var session: URLSession?
-    private let reconnectDelay: TimeInterval = 2.0
+nonisolated final class SyncClient: SyncClientProtocol, @unchecked Sendable {
+    private var webSocket: (any WebSocketTask)?
+    private let factory: WebSocketSessionFactory
+    let reconnectDelay: TimeInterval
     private var shouldReconnect = false
     private var clientId: String = ""
     private var baseURL: String = ""
+
+    init(factory: WebSocketSessionFactory = LiveWebSocketSessionFactory(), reconnectDelay: TimeInterval = 2.0) {
+        self.factory = factory
+        self.reconnectDelay = reconnectDelay
+    }
 
     var onMessage: (@Sendable (SyncEnvelope) -> Void)?
     var onConnected: (@Sendable () -> Void)?
@@ -37,9 +42,7 @@ nonisolated final class SyncClient: @unchecked Sendable {
 
         guard let url = URL(string: urlString) else { return }
 
-        let session = URLSession(configuration: .default)
-        self.session = session
-        let task = session.webSocketTask(with: url)
+        let task = factory.makeTask(url: url)
         webSocket = task
         task.resume()
 

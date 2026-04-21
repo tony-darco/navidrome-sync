@@ -2,10 +2,14 @@ import Foundation
 import UIKit
 
 /// Handles all Subsonic API calls directly against the Navidrome server.
-actor NavidromeClient {
+actor NavidromeClient: NavidromeClientProtocol {
     static let shared = NavidromeClient()
 
-    private let session = URLSession.shared
+    private let session: URLSession
+
+    init(session: URLSession = .shared) {
+        self.session = session
+    }
 
     // MARK: - Validation (used by LoginView)
 
@@ -35,16 +39,46 @@ actor NavidromeClient {
     }
 
     private func buildURL(path: String, params: [String: String] = [:]) throws -> URL {
-        guard let auth = AppConfig.authParams else { throw NavidromeError.notLoggedIn }
         let base = try baseURL()
-        let sep = path.contains("?") ? "&" : "?"
-        var urlString = "\(base)\(path)\(sep)\(auth)"
-        if !params.isEmpty {
-            let extra = params.map { "\($0.key)=\($0.value)" }.joined(separator: "&")
-            urlString += "&\(extra)"
+        guard let u = AppConfig.username, let p = AppConfig.password else {
+            throw NavidromeError.notLoggedIn
         }
-        guard let url = URL(string: urlString) else { throw NavidromeError.invalidURL }
+        guard var components = URLComponents(string: "\(base)\(path)") else {
+            throw NavidromeError.invalidURL
+        }
+        var items: [URLQueryItem] = [
+            URLQueryItem(name: "u", value: u),
+            URLQueryItem(name: "p", value: p),
+            URLQueryItem(name: "v", value: "1.16.1"),
+            URLQueryItem(name: "c", value: "navidrome-ios"),
+            URLQueryItem(name: "f", value: "json"),
+        ]
+        for (key, value) in params {
+            items.append(URLQueryItem(name: key, value: value))
+        }
+        components.queryItems = items
+        guard let url = components.url else { throw NavidromeError.invalidURL }
         return url
+    }
+
+    // MARK: - Shared request + validation
+
+    /// Perform a GET request, validate the HTTP status, decode the Subsonic wrapper,
+    /// and check the Subsonic-level status. Throws on any failure.
+    private func request(path: String, params: [String: String] = [:]) async throws -> SubsonicResponse {
+        let url = try buildURL(path: path, params: params)
+        let (data, response) = try await session.data(from: url)
+        if let http = response as? HTTPURLResponse, http.statusCode != 200 {
+            throw NavidromeError.badResponse
+        }
+        let wrapper = try JSONDecoder().decode(SubsonicWrapper.self, from: data)
+        if wrapper.subsonicResponse.status != "ok" {
+            if let err = wrapper.subsonicResponse.error {
+                throw NavidromeError.serverError(code: err.code, message: err.message)
+            }
+            throw NavidromeError.badResponse
+        }
+        return wrapper.subsonicResponse
     }
 
     // MARK: - Album APIs
@@ -56,119 +90,95 @@ actor NavidromeClient {
             "offset": String(offset),
         ]
         if let genre { params["genre"] = genre }
-        let url = try buildURL(path: "/rest/getAlbumList2.view", params: params)
-        let (data, _) = try await session.data(from: url)
-        let wrapper = try JSONDecoder().decode(SubsonicWrapper.self, from: data)
-        return wrapper.subsonicResponse.albumList2?.album ?? []
+        let resp = try await request(path: "/rest/getAlbumList2.view", params: params)
+        return resp.albumList2?.album ?? []
     }
 
     func getAlbum(id: String) async throws -> (album: Album, songs: [Song]) {
-        let url = try buildURL(path: "/rest/getAlbum.view", params: ["id": id])
-        let (data, _) = try await session.data(from: url)
-        let wrapper = try JSONDecoder().decode(SubsonicWrapper.self, from: data)
-        guard let raw = wrapper.subsonicResponse.album else {
+        let resp = try await request(path: "/rest/getAlbum.view", params: ["id": id])
+        guard let raw = resp.album else {
             throw NavidromeError.badResponse
         }
         return (album: raw.toAlbum(), songs: raw.song ?? [])
     }
 
     func search(query: String) async throws -> (albums: [Album], songs: [Song]) {
-        let url = try buildURL(path: "/rest/search3.view", params: [
+        let resp = try await request(path: "/rest/search3.view", params: [
             "query": query,
             "albumCount": "20",
             "songCount": "20",
         ])
-        let (data, _) = try await session.data(from: url)
-        let wrapper = try JSONDecoder().decode(SubsonicWrapper.self, from: data)
-        let result = wrapper.subsonicResponse.searchResult3
+        let result = resp.searchResult3
         return (albums: result?.album ?? [], songs: result?.song ?? [])
     }
 
     // MARK: - Artist APIs
 
     func getArtists() async throws -> [ArtistIndex] {
-        let url = try buildURL(path: "/rest/getArtists.view")
-        let (data, _) = try await session.data(from: url)
-        let wrapper = try JSONDecoder().decode(SubsonicWrapper.self, from: data)
-        return wrapper.subsonicResponse.artists?.index ?? []
+        let resp = try await request(path: "/rest/getArtists.view")
+        return resp.artists?.index ?? []
     }
 
     // MARK: - Genre APIs
 
     func getGenres() async throws -> [Genre] {
-        let url = try buildURL(path: "/rest/getGenres.view")
-        let (data, _) = try await session.data(from: url)
-        let wrapper = try JSONDecoder().decode(SubsonicWrapper.self, from: data)
-        return wrapper.subsonicResponse.genres?.genre ?? []
+        let resp = try await request(path: "/rest/getGenres.view")
+        return resp.genres?.genre ?? []
     }
 
     func getSongsByGenre(genre: String, count: Int = 50, offset: Int = 0) async throws -> [Song] {
-        let url = try buildURL(path: "/rest/getSongsByGenre.view", params: [
+        let resp = try await request(path: "/rest/getSongsByGenre.view", params: [
             "genre": genre,
             "count": String(count),
             "offset": String(offset),
         ])
-        let (data, _) = try await session.data(from: url)
-        let wrapper = try JSONDecoder().decode(SubsonicWrapper.self, from: data)
-        return wrapper.subsonicResponse.songsByGenre?.song ?? []
+        return resp.songsByGenre?.song ?? []
     }
 
     func getArtist(id: String) async throws -> ArtistDetail {
-        let url = try buildURL(path: "/rest/getArtist.view", params: ["id": id])
-        let (data, _) = try await session.data(from: url)
-        let wrapper = try JSONDecoder().decode(SubsonicWrapper.self, from: data)
-        guard let artist = wrapper.subsonicResponse.artist else {
+        let resp = try await request(path: "/rest/getArtist.view", params: ["id": id])
+        guard let artist = resp.artist else {
             throw NavidromeError.badResponse
         }
         return artist
     }
 
     func getArtistInfo2(id: String) async throws -> ArtistInfo2 {
-        let url = try buildURL(path: "/rest/getArtistInfo2.view", params: ["id": id])
-        let (data, _) = try await session.data(from: url)
-        let wrapper = try JSONDecoder().decode(SubsonicWrapper.self, from: data)
-        return wrapper.subsonicResponse.artistInfo2 ?? ArtistInfo2(biography: nil, largeImageUrl: nil, mediumImageUrl: nil, smallImageUrl: nil)
+        let resp = try await request(path: "/rest/getArtistInfo2.view", params: ["id": id])
+        return resp.artistInfo2 ?? ArtistInfo2(biography: nil, largeImageUrl: nil, mediumImageUrl: nil, smallImageUrl: nil)
     }
 
     func getTopSongs(artistName: String, count: Int = 50) async throws -> [Song] {
-        let url = try buildURL(path: "/rest/getTopSongs.view", params: [
+        let resp = try await request(path: "/rest/getTopSongs.view", params: [
             "artist": artistName,
             "count": String(count),
         ])
-        let (data, _) = try await session.data(from: url)
-        let wrapper = try JSONDecoder().decode(SubsonicWrapper.self, from: data)
-        return wrapper.subsonicResponse.topSongs?.song ?? []
+        return resp.topSongs?.song ?? []
     }
 
     // MARK: - Song APIs
 
     func getSongs(offset: Int = 0, count: Int = 50) async throws -> [Song] {
-        let url = try buildURL(path: "/rest/search3.view", params: [
+        let resp = try await request(path: "/rest/search3.view", params: [
             "query": "",
             "songCount": String(count),
             "songOffset": String(offset),
             "artistCount": "0",
             "albumCount": "0",
         ])
-        let (data, _) = try await session.data(from: url)
-        let wrapper = try JSONDecoder().decode(SubsonicWrapper.self, from: data)
-        return wrapper.subsonicResponse.searchResult3?.song ?? []
+        return resp.searchResult3?.song ?? []
     }
 
     // MARK: - Playlist APIs
 
     func getPlaylists() async throws -> [Playlist] {
-        let url = try buildURL(path: "/rest/getPlaylists.view")
-        let (data, _) = try await session.data(from: url)
-        let wrapper = try JSONDecoder().decode(SubsonicWrapper.self, from: data)
-        return wrapper.subsonicResponse.playlists?.playlist ?? []
+        let resp = try await request(path: "/rest/getPlaylists.view")
+        return resp.playlists?.playlist ?? []
     }
 
     func getPlaylist(id: String) async throws -> PlaylistWithSongs {
-        let url = try buildURL(path: "/rest/getPlaylist.view", params: ["id": id])
-        let (data, _) = try await session.data(from: url)
-        let wrapper = try JSONDecoder().decode(SubsonicWrapper.self, from: data)
-        guard let playlist = wrapper.subsonicResponse.playlist else {
+        let resp = try await request(path: "/rest/getPlaylist.view", params: ["id": id])
+        guard let playlist = resp.playlist else {
             throw NavidromeError.badResponse
         }
         return playlist
@@ -176,40 +186,48 @@ actor NavidromeClient {
 
     func createPlaylist(name: String, songIds: [String] = []) async throws -> String {
         var params = ["name": name]
-        // songId params need to be repeated in the URL, but for creation with no songs this is fine
+        // For URLComponents, we handle repeated songId params by building the URL
+        // then appending them, since URLComponents doesn't natively support repeated keys
         if songIds.isEmpty {
-            let url = try buildURL(path: "/rest/createPlaylist.view", params: params)
-            let (data, _) = try await session.data(from: url)
-            let wrapper = try JSONDecoder().decode(SubsonicWrapper.self, from: data)
-            return wrapper.subsonicResponse.playlist?.id ?? ""
+            let resp = try await request(path: "/rest/createPlaylist.view", params: params)
+            return resp.playlist?.id ?? ""
         }
-        // Build URL with repeated songId params
         let url = try buildURL(path: "/rest/createPlaylist.view", params: params)
-        let songParams = songIds.map { "songId=\($0)" }.joined(separator: "&")
-        guard let fullURL = URL(string: url.absoluteString + "&" + songParams) else {
+        var components = URLComponents(url: url, resolvingAgainstBaseURL: false)!
+        let existing = components.queryItems ?? []
+        components.queryItems = existing + songIds.map { URLQueryItem(name: "songId", value: $0) }
+        guard let fullURL = components.url else {
             throw NavidromeError.invalidURL
         }
-        let (data, _) = try await session.data(from: fullURL)
+        let (data, response) = try await session.data(from: fullURL)
+        if let http = response as? HTTPURLResponse, http.statusCode != 200 {
+            throw NavidromeError.badResponse
+        }
         let wrapper = try JSONDecoder().decode(SubsonicWrapper.self, from: data)
+        if wrapper.subsonicResponse.status != "ok" {
+            if let err = wrapper.subsonicResponse.error {
+                throw NavidromeError.serverError(code: err.code, message: err.message)
+            }
+            throw NavidromeError.badResponse
+        }
         return wrapper.subsonicResponse.playlist?.id ?? ""
     }
 
     func updatePlaylist(playlistId: String, songIdsToAdd: [String] = [], songIndexesToRemove: [Int] = []) async throws {
-        var url = try buildURL(path: "/rest/updatePlaylist.view", params: ["playlistId": playlistId])
-        var extra = ""
+        let url = try buildURL(path: "/rest/updatePlaylist.view", params: ["playlistId": playlistId])
+        var components = URLComponents(url: url, resolvingAgainstBaseURL: false)!
+        var items = components.queryItems ?? []
         for songId in songIdsToAdd {
-            extra += "&songIdToAdd=\(songId)"
+            items.append(URLQueryItem(name: "songIdToAdd", value: songId))
         }
         for index in songIndexesToRemove {
-            extra += "&songIndexToRemove=\(index)"
+            items.append(URLQueryItem(name: "songIndexToRemove", value: String(index)))
         }
-        if !extra.isEmpty {
-            guard let fullURL = URL(string: url.absoluteString + extra) else {
-                throw NavidromeError.invalidURL
-            }
-            url = fullURL
+        components.queryItems = items
+        guard let fullURL = components.url else {
+            throw NavidromeError.invalidURL
         }
-        let (_, _) = try await session.data(from: url)
+        let (_, _) = try await session.data(from: fullURL)
     }
 
     func deletePlaylist(id: String) async throws {
@@ -253,23 +271,44 @@ actor NavidromeClient {
 
     /// URL builder for media endpoints — nonisolated since it only reads AppConfig.
     private nonisolated func buildMediaURL(path: String, params: [String: String] = [:]) throws -> URL {
-        guard let base = AppConfig.serverURL, let auth = AppConfig.authParams else {
+        guard let base = AppConfig.serverURL,
+              let u = AppConfig.username,
+              let p = AppConfig.password else {
             throw NavidromeError.notLoggedIn
         }
-        let sep = path.contains("?") ? "&" : "?"
-        var urlString = "\(base)\(path)\(sep)\(auth)"
-        if !params.isEmpty {
-            let extra = params.map { "\($0.key)=\($0.value)" }.joined(separator: "&")
-            urlString += "&\(extra)"
+        guard var components = URLComponents(string: "\(base)\(path)") else {
+            throw NavidromeError.invalidURL
         }
-        guard let url = URL(string: urlString) else { throw NavidromeError.invalidURL }
+        var items: [URLQueryItem] = [
+            URLQueryItem(name: "u", value: u),
+            URLQueryItem(name: "p", value: p),
+            URLQueryItem(name: "v", value: "1.16.1"),
+            URLQueryItem(name: "c", value: "navidrome-ios"),
+            URLQueryItem(name: "f", value: "json"),
+        ]
+        for (key, value) in params {
+            items.append(URLQueryItem(name: key, value: value))
+        }
+        components.queryItems = items
+        guard let url = components.url else { throw NavidromeError.invalidURL }
         return url
     }
 }
 
-nonisolated enum NavidromeError: Error {
+nonisolated enum NavidromeError: LocalizedError {
     case invalidURL
     case badResponse
     case authFailed
     case notLoggedIn
+    case serverError(code: Int, message: String)
+
+    var errorDescription: String? {
+        switch self {
+        case .invalidURL: "Invalid server URL."
+        case .badResponse: "Unexpected response from server."
+        case .authFailed: "Wrong username or password."
+        case .notLoggedIn: "Not logged in."
+        case .serverError(_, let message): message
+        }
+    }
 }

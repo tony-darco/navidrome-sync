@@ -130,6 +130,7 @@ nonisolated struct SubsonicWrapper: Decodable, Sendable {
 
 nonisolated struct SubsonicResponse: Decodable, Sendable {
     let status: String
+    let error: SubsonicError?
     let albumList2: AlbumList2?
     let album: AlbumWithSongs?
     let searchResult3: SearchResult3?
@@ -141,6 +142,11 @@ nonisolated struct SubsonicResponse: Decodable, Sendable {
     let songsByGenre: SongsByGenreWrapper?
     let artistInfo2: ArtistInfo2?
     let topSongs: TopSongsWrapper?
+}
+
+nonisolated struct SubsonicError: Decodable, Sendable {
+    let code: Int
+    let message: String
 }
 
 nonisolated struct AlbumList2: Decodable, Sendable {

@@ -5,6 +5,7 @@ import Security
 /// All members are static — UserDefaults is thread-safe, so access from any context is safe.
 nonisolated enum AppConfig {
     private static let defaults = UserDefaults.standard
+    static var keychainService = "com.navidromesync.credentials"
 
     // MARK: - Server
 
@@ -113,6 +114,7 @@ nonisolated enum AppConfig {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrAccount as String: key,
+            kSecAttrService as String: keychainService,
         ]
         SecItemDelete(query as CFDictionary)
 
@@ -122,23 +124,50 @@ nonisolated enum AppConfig {
     }
 
     static func loadFromKeychain(key: String) -> String? {
-        let query: [String: Any] = [
+        let serviceQuery: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrAccount as String: key,
+            kSecAttrService as String: keychainService,
+            kSecReturnData as String: true,
+            kSecMatchLimit as String: kSecMatchLimitOne,
+        ]
+        var result: AnyObject?
+        let serviceStatus = SecItemCopyMatching(serviceQuery as CFDictionary, &result)
+        if serviceStatus == errSecSuccess, let data = result as? Data {
+            return String(data: data, encoding: .utf8)
+        }
+
+        // Backward compatibility: read legacy entries without service key.
+        let legacyQuery: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrAccount as String: key,
             kSecReturnData as String: true,
             kSecMatchLimit as String: kSecMatchLimitOne,
         ]
-        var result: AnyObject?
-        let status = SecItemCopyMatching(query as CFDictionary, &result)
-        guard status == errSecSuccess, let data = result as? Data else { return nil }
-        return String(data: data, encoding: .utf8)
+        result = nil
+        let legacyStatus = SecItemCopyMatching(legacyQuery as CFDictionary, &result)
+        guard legacyStatus == errSecSuccess, let data = result as? Data else { return nil }
+        let value = String(data: data, encoding: .utf8)
+        if let value {
+            saveToKeychain(key: key, value: value)
+            SecItemDelete(legacyQuery as CFDictionary)
+        }
+        return value
     }
 
     static func deleteFromKeychain(key: String) {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrAccount as String: key,
+            kSecAttrService as String: keychainService,
         ]
         SecItemDelete(query as CFDictionary)
+
+        // Cleanup legacy entries too.
+        let legacyQuery: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrAccount as String: key,
+        ]
+        SecItemDelete(legacyQuery as CFDictionary)
     }
 }
