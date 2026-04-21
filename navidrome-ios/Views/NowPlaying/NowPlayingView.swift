@@ -1,277 +1,283 @@
 import SwiftUI
 
+// MARK: - NowPlayingView
+
 struct NowPlayingView: View {
     @EnvironmentObject private var store: SyncStore
-    var onNavigateToAlbum: ((String) -> Void)? = nil
-    var onNavigateToArtist: ((String, String) -> Void)? = nil
-    @State private var showQueue = false
+    @Environment(AppNavigationState.self) private var nav
+    @Environment(CrateColorState.self) private var crateState
+
+    @State private var showQueue         = false
     @State private var showAddToPlaylist = false
 
     var body: some View {
-        NavigationStack {
-            Group {
-                if let song = store.nowPlaying {
-                    songView(song)
-                } else {
-                    emptyState
+        GeometryReader { geo in
+            ZStack(alignment: .bottomLeading) {
+                VStack(spacing: 0) {
+                    graphicZone(height: geo.size.height * 0.55)
+                    bodyZone(height:   geo.size.height * 0.45)
                 }
-            }
-            .background(backgroundGradient)
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .principal) {
-                    HStack(spacing: 6) {
-                        Text("Now Playing")
-                            .font(.headline)
-                        if store.isConnected {
-                            Circle()
-                                .fill(Color.brandPink)
-                                .frame(width: 8, height: 8)
-                        }
-                    }
-                }
-            }
 
+                // Nav popover — overlays both zones, anchored bottom-left
+                NavPopoverView(
+                    isVisible: Binding(
+                        get: { nav.isPopoverVisible },
+                        set: { nav.isPopoverVisible = $0 }
+                    ),
+                    crate: crateState.current,
+                    onNavigate: { nav.handlePopoverSelection($0) }
+                )
+            }
         }
-    }
-
-    // MARK: - Background
-
-    @ViewBuilder
-    private var backgroundGradient: some View {
-        store.dominantBackgroundColor
-            .ignoresSafeArea()
-    }
-
-    // MARK: - Empty state
-
-    private var emptyState: some View {
-        VStack(spacing: 16) {
-            Image(systemName: "music.note")
-                .font(.system(size: 60))
-                .foregroundStyle(.secondary)
-            Text("Nothing playing")
-                .font(.title3)
-                .foregroundStyle(.secondary)
+        .ignoresSafeArea()
+        .onChange(of: store.nowPlaying?.albumId) { _, newId in
+            guard let id = newId else { return }
+            crateState.update(albumId: id)
         }
-    }
-
-    // MARK: - Song view
-
-    private func songView(_ song: NowPlayingSong) -> some View {
-        VStack(spacing: 24) {
-            Spacer()
-
-            // Cover art
-            CoverArtImage(id: song.coverArtId, size: 600)
-                .frame(width: 300, height: 300)
-                .clipShape(RoundedRectangle(cornerRadius: 12))
-                .shadow(radius: 10)
-
-            // Song info
-            VStack(spacing: 6) {
-                if let albumId = song.albumId, !albumId.isEmpty {
-                    Button { onNavigateToAlbum?(albumId) } label: {
-                        Text(song.title)
-                            .font(.title2)
-                            .fontWeight(.bold)
-                            .lineLimit(1)
-                    }
-                    .buttonStyle(.plain)
-                } else {
-                    Text(song.title)
-                        .font(.title2)
-                        .fontWeight(.bold)
-                        .lineLimit(1)
-                }
-
-                if let artistId = song.artistId, !artistId.isEmpty {
-                    Button { onNavigateToArtist?(artistId, song.artist) } label: {
-                        Text(song.artist)
-                            .font(.title3)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                    }
-                    .buttonStyle(.plain)
-                } else {
-                    Text(song.artist)
-                        .font(.title3)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                }
-
-                if let albumId = song.albumId, !albumId.isEmpty {
-                    Button { onNavigateToAlbum?(albumId) } label: {
-                        Text(song.album)
-                            .font(.subheadline)
-                            .foregroundStyle(.tertiary)
-                            .lineLimit(1)
-                    }
-                    .buttonStyle(.plain)
-                } else {
-                    Text(song.album)
-                        .font(.subheadline)
-                        .foregroundStyle(.tertiary)
-                        .lineLimit(1)
-                }
+        .onAppear {
+            if let id = store.nowPlaying?.albumId {
+                crateState.update(albumId: id)
             }
-            .padding(.horizontal)
-
-            // Star + Add to playlist
-            HStack(spacing: 24) {
-                Button { store.toggleStar() } label: {
-                    Image(systemName: song.starred == true ? "heart.fill" : "heart")
-                        .font(.title2)
-                        .foregroundStyle(song.starred == true ? .red : .secondary)
-                }
-
-                Button { showAddToPlaylist = true } label: {
-                    Image(systemName: "plus.circle")
-                        .font(.title2)
-                        .foregroundStyle(.secondary)
-                }
-            }
-
-            // Progress
-            if store.myRole == "active" {
-                activeProgressBar(song)
-            } else {
-                observerProgressBar(song)
-            }
-
-            // Transport controls (both roles)
-            transportControls(for: song)
-            extraControls
-
-            // Play Here (when not active)
-            if store.isConnected && store.myRole != "active" {
-                PlayHereButton()
-            }
-
-            Spacer()
         }
-        .padding()
         .sheet(isPresented: $showQueue) {
-            QueueSheet()
-                .environmentObject(store)
+            QueueSheet().environmentObject(store)
         }
         .sheet(isPresented: $showAddToPlaylist) {
-            AddToPlaylistSheet(songId: song.songId)
+            if let songId = store.nowPlaying?.songId {
+                AddToPlaylistSheet(songId: songId)
+            }
         }
     }
 
-    // MARK: - Active: seekable progress
+    // MARK: - Graphic zone (top 55%)
 
-    private func activeProgressBar(_ song: NowPlayingSong) -> some View {
-        VStack(spacing: 4) {
-            Slider(
-                value: Binding(
-                    get: { store.position },
-                    set: { store.seek(to: $0) }
-                ),
-                in: 0...max(Double(song.durationSecs), 1)
+    @ViewBuilder
+    private func graphicZone(height: CGFloat) -> some View {
+        ZStack(alignment: .bottom) {
+
+            // Full-bleed album art or vinyl fallback
+            Group {
+                if let song = store.nowPlaying {
+                    CoverArtImage(id: song.coverArtId, size: 600)
+                        .scaledToFill()
+                } else {
+                    Rectangle().fill(DesignBg.playerDark)
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: height)
+            .clipped()
+
+            // Gradient overlay
+            LinearGradient(
+                stops: [
+                    .init(color: .black.opacity(0.10), location: 0.00),
+                    .init(color: .black.opacity(0.00), location: 0.30),
+                    .init(color: .black.opacity(0.62), location: 1.00),
+                ],
+                startPoint: .top,
+                endPoint: .bottom
             )
-            .tint(.white)
+            .allowsHitTesting(false)
 
-            HStack {
-                Text(formatTime(store.position))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                Spacer()
-                Text(formatTime(Double(song.durationSecs)))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+            // Status bar pinned to top
+            statusBar
+                .frame(maxWidth: .infinity, maxHeight: height, alignment: .top)
+
+            // Track info + scrubber pinned to bottom
+            if let song = store.nowPlaying {
+                trackInfoBlock(song: song)
+            } else {
+                emptyOverlay
             }
         }
-        .padding(.horizontal)
+        .frame(height: height)
     }
 
-    // MARK: - Observer: non-interactive progress
+    // MARK: - Status bar
 
-    private func observerProgressBar(_ song: NowPlayingSong) -> some View {
-        VStack(spacing: 4) {
-            Slider(
-                value: Binding(
-                    get: { store.position },
-                    set: { store.seek(to: $0) }
-                ),
-                in: 0...max(Double(song.durationSecs), 1)
+    private var statusBar: some View {
+        HStack(spacing: DesignSpacing.sm) {
+            Text(Date(), style: .time)
+                .font(.system(size: 11, weight: .medium, design: .monospaced))
+            Spacer()
+            Image(systemName: "wifi")
+                .font(.system(size: 11))
+            Image(systemName: "battery.100")
+                .font(.system(size: 11))
+        }
+        .foregroundStyle(DesignText.onDark)
+        .padding(.horizontal, DesignSpacing.xl)
+        .padding(.top, 52)
+    }
+
+    // MARK: - Track info block
+
+    private func trackInfoBlock(song: NowPlayingSong) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(song.title)
+                .font(.system(size: 17, weight: .bold))
+                .foregroundStyle(DesignText.onDark)
+                .lineLimit(1)
+            Text(song.artist)
+                .font(.system(size: 12))
+                .foregroundStyle(DesignText.onDark)
+                .lineLimit(1)
+            Text(song.album)
+                .font(.system(size: 10))
+                .foregroundStyle(DesignText.onDarkMuted)
+                .lineLimit(1)
+            progressBar(song: song)
+                .padding(.top, DesignSpacing.xs)
+        }
+        .padding(.horizontal, DesignSpacing.lg)
+        .padding(.bottom, DesignSpacing.md)
+    }
+
+    // MARK: - Empty state overlay (graphic zone)
+
+    private var emptyOverlay: some View {
+        VStack(spacing: DesignSpacing.md) {
+            Image(systemName: "music.note")
+                .font(.system(size: 48))
+                .foregroundStyle(DesignText.onDarkMuted)
+            Text("Nothing playing")
+                .font(.system(size: 15))
+                .foregroundStyle(DesignText.onDarkMuted)
+        }
+        .padding(.bottom, DesignSpacing.xl)
+    }
+
+    // MARK: - Progress scrubber (2pt bar + 8pt dot)
+
+    private func progressBar(song: NowPlayingSong) -> some View {
+        GeometryReader { geo in
+            let duration  = max(1.0, Double(song.durationSecs))
+            let fraction  = CGFloat(min(1.0, max(0.0, store.position / duration)))
+            let fillWidth = geo.size.width * fraction
+
+            ZStack(alignment: .leading) {
+                Capsule()
+                    .fill(crateState.current.progBg)
+                    .frame(height: DesignDim.miniProgressH)
+                Capsule()
+                    .fill(crateState.current.progFill)
+                    .frame(width: fillWidth, height: DesignDim.miniProgressH)
+                Circle()
+                    .fill(crateState.current.progFill)
+                    .frame(width: 8, height: 8)
+                    .offset(x: max(0, fillWidth - 4))
+            }
+            .frame(height: 20, alignment: .center)
+            .contentShape(Rectangle())
+            .gesture(
+                DragGesture(minimumDistance: 0)
+                    .onChanged { value in
+                        guard store.myRole == "active" else { return }
+                        let pct = min(1.0, max(0.0, Double(value.location.x / geo.size.width)))
+                        store.seek(to: pct * duration)
+                    }
             )
-            .tint(.white)
-
-            HStack {
-                Text(formatTime(store.position))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                Spacer()
-                Text(formatTime(Double(song.durationSecs)))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
         }
-        .padding(.horizontal)
+        .frame(height: 20)
     }
 
-    // MARK: - Transport controls
+    // MARK: - Body zone (bottom 45%)
 
-    private func transportControls(for song: NowPlayingSong) -> some View {
-        HStack(spacing: 40) {
-            Button { store.prev() } label: {
-                Image(systemName: "backward.fill")
-                    .font(.title)
+    @ViewBuilder
+    private func bodyZone(height: CGFloat) -> some View {
+        ZStack(alignment: .bottom) {
+
+            // Crate device color — transitions via CrateColorState.update()
+            Rectangle().fill(crateState.current.device)
+
+            VStack(spacing: DesignSpacing.md) {
+                Spacer(minLength: DesignSpacing.lg)
+
+                ClickWheelView(
+                    crate:       crateState.current,
+                    onCenterTap: {
+                        if store.isPlaying { store.pause() } else { store.play() }
+                    },
+                    onTopTap:    { },   // volume — handled by hardware buttons
+                    onBottomTap: { },
+                    onLeftTap:   { store.prev() },
+                    onRightTap:  { store.next() },
+                    onScrub: { fraction in
+                        guard let song = store.nowPlaying else { return }
+                        store.seek(to: fraction * Double(song.durationSecs))
+                    }
+                )
+
+                trackDots
+
+                Spacer(minLength: DesignSpacing.xxl)
             }
 
+            bottomBar
+        }
+        .frame(height: height)
+    }
+
+    // MARK: - Track indicator dots
+
+    private var trackDots: some View {
+        let items = buildDotItems(queue: store.queue, index: store.queueIndex)
+        return HStack(spacing: 5) {
+            ForEach(items, id: \.id) { item in
+                Circle()
+                    .fill(item.dotColor)
+                    .frame(width: item.isActive ? 9 : 6, height: item.isActive ? 9 : 6)
+            }
+        }
+    }
+
+    // MARK: - Bottom bar
+
+    private var bottomBar: some View {
+        HStack {
             Button {
-                store.isPlaying ? store.pause() : store.play()
+                nav.isPopoverVisible = true
             } label: {
-                Image(systemName: store.isPlaying ? "pause.circle.fill" : "play.circle.fill")
-                    .font(.system(size: 56))
+                Image(systemName: "line.3.horizontal")
+                    .font(.system(size: 16, weight: .medium))
+                    .foregroundStyle(crateState.current.text)
+                    .frame(width: 32, height: 32)
             }
-
-            Button { store.next() } label: {
-                Image(systemName: "forward.fill")
-                    .font(.title)
-            }
-        }
-        .foregroundStyle(.primary)
-    }
-
-    // MARK: - Shuffle / Repeat / Queue
-
-    private var extraControls: some View {
-        HStack(spacing: 36) {
-            Button { store.toggleShuffle() } label: {
-                Image(systemName: "shuffle")
-                    .font(.title3)
-                    .foregroundStyle(store.isShuffled ? Color.brandPink : .secondary)
-            }
+            .buttonStyle(.plain)
 
             Spacer()
 
-            Button { store.toggleRepeat() } label: {
-                Image(systemName: store.repeatMode == .one ? "repeat.1" : "repeat")
-                    .font(.title3)
-                    .foregroundStyle(store.repeatMode != .off ? Color.brandPink : .secondary)
-            }
-
-            Spacer()
-
-            Button { showQueue = true } label: {
-                Image(systemName: "list.bullet")
-                    .font(.title3)
-                    .foregroundStyle(.secondary)
-            }
+            Text("navidrome-sync")
+                .font(.system(size: 11, weight: .semibold))
+                .tracking(DesignType.tracking(from: DesignType.sectionLabel))
+                .textCase(.uppercase)
+                .foregroundStyle(crateState.current.text)
         }
-        .padding(.horizontal, 24)
+        .padding(.horizontal, DesignSpacing.lg)
+        .padding(.bottom, DesignSpacing.md)
     }
+}
 
-    // MARK: - Helpers
+// MARK: - DotItem
 
-    private func formatTime(_ seconds: Double) -> String {
-        let total = Int(max(seconds, 0))
-        let m = total / 60
-        let s = total % 60
-        return String(format: "%d:%02d", m, s)
+private struct DotItem: Identifiable {
+    let id:       String
+    let dotColor: Color
+    let isActive: Bool
+}
+
+private func buildDotItems(queue: [NowPlayingSong], index: Int) -> [DotItem] {
+    guard !queue.isEmpty else { return [] }
+    let maxDots = 9
+    let half    = maxDots / 2
+    let start   = max(0, min(index - half, queue.count - maxDots))
+    let end     = min(queue.count, start + maxDots)
+    return (start..<end).map { i in
+        DotItem(
+            id:       queue[i].songId,
+            dotColor: getCrateColor(albumId: queue[i].albumId ?? "a").dot,
+            isActive: i == index
+        )
     }
 }
 
@@ -284,14 +290,12 @@ struct QueueSheet: View {
     var body: some View {
         NavigationStack {
             List {
-                // Now Playing
                 if store.queueIndex < store.queue.count {
                     Section("Now Playing") {
                         queueRow(store.queue[store.queueIndex], isActive: true)
                     }
                 }
 
-                // Up Next
                 let upcoming = Array(store.queue.dropFirst(store.queueIndex + 1))
                 if !upcoming.isEmpty {
                     Section {
@@ -307,12 +311,8 @@ struct QueueSheet: View {
                         HStack {
                             Text("Next From: \(store.nowPlaying?.album ?? "")")
                             Spacer()
-                            if upcoming.count > 0 {
-                                Button("Clear queue") {
-                                    store.clearQueue()
-                                }
+                            Button("Clear queue") { store.clearQueue() }
                                 .font(.subheadline)
-                            }
                         }
                     }
                 }
@@ -322,9 +322,7 @@ struct QueueSheet: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    Button { dismiss() } label: {
-                        Image(systemName: "xmark")
-                    }
+                    Button { dismiss() } label: { Image(systemName: "xmark") }
                 }
             }
         }
@@ -335,7 +333,6 @@ struct QueueSheet: View {
             CoverArtImage(id: song.coverArtId, size: 80)
                 .frame(width: 44, height: 44)
                 .clipShape(RoundedRectangle(cornerRadius: 6))
-
             VStack(alignment: .leading, spacing: 2) {
                 Text(song.title)
                     .font(.subheadline)
@@ -347,7 +344,6 @@ struct QueueSheet: View {
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
             }
-
             Spacer()
         }
     }
