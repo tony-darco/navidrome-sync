@@ -3,217 +3,342 @@ import SwiftUI
 struct SettingsView: View {
     @EnvironmentObject private var store: SyncStore
     @EnvironmentObject private var downloadManager: DownloadManager
+    @Environment(AppNavigationState.self) private var nav
+    @Environment(CrateColorState.self) private var crateState
+
     @Binding var isLoggedIn: Bool
+
+    // Server section
     @State private var syncURL: String = AppConfig.syncServiceURL ?? ""
-    @State private var albumColorBg: Bool = AppConfig.coloredAlbumBackground
-    @State private var playlistColorBg: Bool = AppConfig.coloredPlaylistBackground
-    @State private var offlineMode: Bool = AppConfig.offlineMode
+
+    // Sync section
+    @State private var offlineMode: Bool    = AppConfig.offlineMode
     @State private var autoCacheEnabled: Bool = AppConfig.autoCacheEnabled
-    @State private var maxCacheSize: Int64 = AppConfig.maxCacheSize
+    @State private var maxCacheSize: Int64  = AppConfig.maxCacheSize
     @State private var downloadQuality: Int = AppConfig.downloadQuality
+
     @State private var showClearAllAlert = false
+    @State private var showSyncURLEditor = false
 
-    private var albumColorBinding: Binding<Bool> {
-        Binding(
-            get: { albumColorBg },
-            set: { albumColorBg = $0; AppConfig.coloredAlbumBackground = $0 }
-        )
-    }
-
-    private var playlistColorBinding: Binding<Bool> {
-        Binding(
-            get: { playlistColorBg },
-            set: { playlistColorBg = $0; AppConfig.coloredPlaylistBackground = $0 }
-        )
-    }
-
-    private var offlineModeBinding: Binding<Bool> {
-        Binding(
-            get: { offlineMode },
-            set: {
-                offlineMode = $0
-                AppConfig.offlineMode = $0
-                if $0 {
-                    store.disconnect()
-                } else {
-                    store.connect()
-                }
-            }
-        )
-    }
-
-    private var autoCacheBinding: Binding<Bool> {
-        Binding(
-            get: { autoCacheEnabled },
-            set: { autoCacheEnabled = $0; AppConfig.autoCacheEnabled = $0 }
-        )
-    }
+    // Crate color override index (-1 = Auto)
+    @State private var crateOverrideIndex: Int = {
+        if UserDefaults.standard.bool(forKey: "crateColorOverride_set") {
+            return UserDefaults.standard.integer(forKey: "crateColorOverride_raw")
+        }
+        return -1
+    }()
 
     var body: some View {
-        NavigationStack {
-            List {
-                // Playback status
-                Section("Status") {
-                    HStack {
-                        Text("Backend")
-                        Spacer()
-                        HStack(spacing: 6) {
-                            Circle()
-                                .fill(store.isConnected ? Color.brandPink : Color.brandRed)
-                                .frame(width: 8, height: 8)
-                            Text(store.isConnected ? "Online" : "Disconnected")
-                                .foregroundStyle(.secondary)
+        @Bindable var nav = nav
+
+        NavigationStack(path: $nav.settingsPath) {
+            ZStack(alignment: .bottomLeading) {
+                DesignBg.cream.ignoresSafeArea()
+
+                List {
+                    // MARK: Server
+                    Section {
+                        settingsRow(label: "Server URL") {
+                            Text(AppConfig.serverURL ?? "—")
+                                .font(.system(size: 13))
+                                .foregroundStyle(DesignText.secondary)
+                                .lineLimit(1)
                         }
+                        settingsRow(label: "Username") {
+                            Text(AppConfig.username ?? "—")
+                                .font(.system(size: 13))
+                                .foregroundStyle(DesignText.secondary)
+                        }
+                        settingsRow(label: "Password") {
+                            Text("••••••••")
+                                .font(.system(size: 13))
+                                .foregroundStyle(DesignText.secondary)
+                        }
+                        settingsRow(label: "Status") {
+                            connectionBadge
+                        }
+                    } header: {
+                        sectionLabel("Server")
                     }
-                    .listRowBackground(Color.clear)
+                    .listRowBackground(DesignBg.card)
 
-                    HStack {
-                        Text("Role")
-                        Spacer()
-                        Text(store.myRole.capitalized)
-                            .foregroundStyle(.secondary)
+                    // MARK: Appearance
+                    Section {
+                        VStack(alignment: .leading, spacing: DesignSpacing.md) {
+                            Text("Crate Color")
+                                .font(.system(size: 15))
+                                .foregroundStyle(DesignText.primary)
+
+                            crateColorPicker
+                                .padding(.bottom, DesignSpacing.xs)
+                        }
+                        .listRowBackground(DesignBg.card)
+                    } header: {
+                        sectionLabel("Appearance")
                     }
-                    .listRowBackground(Color.clear)
 
-                    HStack {
-                        Text("Client ID")
-                        Spacer()
-                        Text(String(store.myClientId.prefix(8)) + "…")
-                            .foregroundStyle(.secondary)
-                            .font(.caption)
-                    }
-                    .listRowBackground(Color.clear)
+                    // MARK: Sync
+                    Section {
+                        settingsRow(label: "Sync Service URL") {
+                            TextField("http://...", text: $syncURL)
+                                .font(.system(size: 13))
+                                .foregroundStyle(DesignText.secondary)
+                                .multilineTextAlignment(.trailing)
+                                .textInputAutocapitalization(.never)
+                                .autocorrectionDisabled()
+                                .keyboardType(.URL)
+                                .onSubmit { saveSyncURL(); reconnect() }
+                        }
 
-                    if !store.connectedClients.isEmpty {
                         HStack {
-                            Text("Connected Clients")
-                            Spacer()
-                            Text("\(store.connectedClients.count)")
-                                .foregroundStyle(.secondary)
+                            Toggle("Sync on Wi-Fi Only", isOn: .constant(true))
+                                .font(.system(size: 15))
+                                .tint(crateState.current.accent)
                         }
-                        .listRowBackground(Color.clear)
-                    }
-                }
+                        .listRowBackground(DesignBg.card)
 
-                // Server info
-                Section("Server") {
-                    HStack {
-                        Text("URL")
-                        Spacer()
-                        Text(AppConfig.serverURL ?? "—")
-                            .foregroundStyle(.secondary)
-                            .font(.caption)
-                            .lineLimit(1)
-                    }
-                    .listRowBackground(Color.clear)
-
-                    HStack {
-                        Text("Username")
-                        Spacer()
-                        Text(AppConfig.username ?? "—")
-                            .foregroundStyle(.secondary)
-                    }
-                    .listRowBackground(Color.clear)
-                }
-
-                // Sync service
-                Section("Sync Service") {
-                    TextField("Sync URL (e.g. http://192.168.1.116:8080)", text: $syncURL)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
-                        .keyboardType(.URL)
-                        .onSubmit { saveSyncURL() }
-                        .listRowBackground(Color.clear)
-
-                    Button(store.isConnected ? "Reconnect" : "Connect") {
-                        saveSyncURL()
-                        store.disconnect()
-                        store.connect()
-                    }
-                    .disabled(syncURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                    .listRowBackground(Color.clear)
-                }
-
-                // Appearance
-                Section("Appearance") {
-                    Toggle("Album Color Background", isOn: albumColorBinding)
-                        .listRowBackground(Color.clear)
-                    Toggle("Playlist Color Background", isOn: playlistColorBinding)
-                        .listRowBackground(Color.clear)
-                }
-
-                // Downloads
-                Section("Downloads") {
-                    Toggle("Offline Mode", isOn: offlineModeBinding)
-                        .listRowBackground(Color.clear)
-
-                    NavigationLink {
-                        DownloadsView()
-                    } label: {
                         HStack {
-                            Text("Manage Downloads")
-                            Spacer()
-                            Text(formatBytes(downloadManager.totalStorageUsed))
-                                .foregroundStyle(.secondary)
+                            Toggle("Cache Album Art", isOn: Binding(
+                                get: { autoCacheEnabled },
+                                set: { autoCacheEnabled = $0; AppConfig.autoCacheEnabled = $0 }
+                            ))
+                            .font(.system(size: 15))
+                            .tint(crateState.current.accent)
                         }
-                    }
-                    .listRowBackground(Color.clear)
+                        .listRowBackground(DesignBg.card)
 
-                    Toggle("Auto-Cache Played Songs", isOn: autoCacheBinding)
-                        .listRowBackground(Color.clear)
-
-                    if autoCacheEnabled {
-                        Picker("Cache Limit", selection: Binding(
-                            get: { maxCacheSize },
-                            set: { maxCacheSize = $0; AppConfig.maxCacheSize = $0 }
-                        )) {
-                            Text("500 MB").tag(Int64(500 * 1024 * 1024))
-                            Text("1 GB").tag(Int64(1024 * 1024 * 1024))
-                            Text("2 GB").tag(Int64(2 * 1024 * 1024 * 1024))
-                            Text("5 GB").tag(Int64(5 * 1024 * 1024 * 1024))
-                            Text("Unlimited").tag(Int64(0))
+                        settingsRow(label: "Offline Cache") {
+                            Picker("", selection: Binding(
+                                get: { maxCacheSize },
+                                set: { maxCacheSize = $0; AppConfig.maxCacheSize = $0 }
+                            )) {
+                                Text("512 MB").tag(Int64(512 * 1024 * 1024))
+                                Text("1 GB").tag(Int64(1024 * 1024 * 1024))
+                                Text("2 GB").tag(Int64(2 * 1024 * 1024 * 1024))
+                                Text("4 GB").tag(Int64(4 * 1024 * 1024 * 1024))
+                                Text("8 GB").tag(Int64(8 * 1024 * 1024 * 1024))
+                            }
+                            .pickerStyle(.menu)
+                            .tint(crateState.current.accent)
                         }
-                        .listRowBackground(Color.clear)
-                    }
 
-                    Picker("Download Quality", selection: Binding(
-                        get: { downloadQuality },
-                        set: { downloadQuality = $0; AppConfig.downloadQuality = $0 }
-                    )) {
-                        Text("Original").tag(0)
-                        Text("High (320 kbps)").tag(320)
-                        Text("Medium (192 kbps)").tag(192)
-                        Text("Low (128 kbps)").tag(128)
-                    }
-                    .listRowBackground(Color.clear)
+                        settingsRow(label: "Stream Quality") {
+                            Picker("", selection: Binding(
+                                get: { downloadQuality },
+                                set: { downloadQuality = $0; AppConfig.downloadQuality = $0 }
+                            )) {
+                                Text("96 kbps").tag(96)
+                                Text("128 kbps").tag(128)
+                                Text("256 kbps").tag(256)
+                                Text("320 kbps").tag(320)
+                            }
+                            .pickerStyle(.menu)
+                            .tint(crateState.current.accent)
+                        }
 
-                    Button("Clear All Downloads", role: .destructive) {
-                        showClearAllAlert = true
+                        HStack {
+                            Toggle("Offline Mode", isOn: Binding(
+                                get: { offlineMode },
+                                set: {
+                                    offlineMode = $0; AppConfig.offlineMode = $0
+                                    if $0 { store.disconnect() } else { store.connect() }
+                                }
+                            ))
+                            .font(.system(size: 15))
+                            .tint(crateState.current.accent)
+                        }
+                        .listRowBackground(DesignBg.card)
+                    } header: {
+                        sectionLabel("Sync")
                     }
-                    .listRowBackground(Color.clear)
+                    .listRowBackground(DesignBg.card)
+
+                    // MARK: About
+                    Section {
+                        settingsRow(label: "Version") {
+                            Text(appVersion)
+                                .font(.system(size: 13))
+                                .foregroundStyle(DesignText.secondary)
+                        }
+                        settingsRow(label: "Last Synced") {
+                            Text(lastSyncedText)
+                                .font(.system(size: 13))
+                                .foregroundStyle(DesignText.secondary)
+                        }
+                    } header: {
+                        sectionLabel("About")
+                    }
+                    .listRowBackground(DesignBg.card)
+
+                    // MARK: Actions
+                    Section {
+                        Button("Clear All Downloads", role: .destructive) {
+                            showClearAllAlert = true
+                        }
+                        .font(.system(size: 15))
+                        .listRowBackground(DesignBg.card)
+
+                        Button("Sign Out", role: .destructive) {
+                            logout()
+                        }
+                        .font(.system(size: 15))
+                        .listRowBackground(DesignBg.card)
+                    }
                 }
+                .listStyle(.insetGrouped)
+                .scrollContentBackground(.hidden)
+                .background(DesignBg.cream)
+                // padding for bottom nav
+                .safeAreaInset(edge: .bottom) { Color.clear.frame(height: 60) }
 
-                // Actions
-                Section {
-                    Button("Sign Out", role: .destructive) {
-                        logout()
-                    }
-                    .listRowBackground(Color.clear)
-                }
+                bottomNav
+                    .frame(maxWidth: .infinity, alignment: .bottom)
+
+                NavPopoverView(
+                    isVisible: Binding(
+                        get: { nav.isPopoverVisible },
+                        set: { nav.isPopoverVisible = $0 }
+                    ),
+                    crate: crateState.current,
+                    onNavigate: { nav.handlePopoverSelection($0) }
+                )
             }
-            .scrollContentBackground(.hidden)
-            .background { store.dominantBackgroundColor.ignoresSafeArea() }
             .navigationTitle("Settings")
+            .navigationBarTitleDisplayMode(.large)
             .alert("Clear All Downloads?", isPresented: $showClearAllAlert) {
                 Button("Cancel", role: .cancel) {}
-                Button("Clear All", role: .destructive) {
-                    downloadManager.removeAll()
-                }
+                Button("Clear All", role: .destructive) { downloadManager.removeAll() }
             } message: {
                 Text("This will delete all downloaded files.")
             }
         }
     }
+
+    // MARK: - Connection status badge
+
+    private var connectionBadge: some View {
+        HStack(spacing: 5) {
+            Circle()
+                .fill(store.isConnected ? DesignStatus.syncedDot : DesignStatus.errorDot)
+                .frame(width: 7, height: 7)
+            Text(store.isConnected ? "Connected" : "Disconnected")
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(store.isConnected ? DesignStatus.syncedText : DesignStatus.errorText)
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 3)
+        .background(store.isConnected ? DesignStatus.syncedBg : DesignStatus.errorBg)
+        .clipShape(Capsule())
+    }
+
+    // MARK: - Crate color picker
+
+    private var crateColorPicker: some View {
+        HStack(spacing: DesignSpacing.sm) {
+            // Auto swatch (gradient)
+            Button {
+                crateOverrideIndex = -1
+                crateState.clearOverride()
+            } label: {
+                ZStack {
+                    Circle()
+                        .fill(
+                            AngularGradient(
+                                colors: CRATE_COLORS.map(\.accent),
+                                center: .center
+                            )
+                        )
+                    if crateOverrideIndex == -1 {
+                        Circle()
+                            .stroke(DesignText.primary, lineWidth: 2)
+                    }
+                }
+                .frame(width: 32, height: 32)
+            }
+            .buttonStyle(.plain)
+
+            ForEach(Array(CRATE_COLORS.enumerated()), id: \.offset) { idx, crate in
+                Button {
+                    crateOverrideIndex = idx
+                    crateState.applyOverride(index: idx)
+                } label: {
+                    ZStack {
+                        Circle().fill(crate.device)
+                        Circle()
+                            .stroke(crate.accent, lineWidth: 1.5)
+                        if crateOverrideIndex == idx {
+                            Circle()
+                                .stroke(DesignText.primary, lineWidth: 2)
+                        }
+                    }
+                    .frame(width: 32, height: 32)
+                }
+                .buttonStyle(.plain)
+            }
+
+            Spacer()
+        }
+    }
+
+    // MARK: - Helper views
+
+    @ViewBuilder
+    private func settingsRow<T: View>(label: String, @ViewBuilder content: () -> T) -> some View {
+        HStack {
+            Text(label)
+                .font(.system(size: 15))
+                .foregroundStyle(DesignText.primary)
+            Spacer()
+            content()
+        }
+        .listRowBackground(DesignBg.card)
+    }
+
+    private func sectionLabel(_ text: String) -> some View {
+        Text(text)
+            .font(.system(size: DesignType.sectionLabel.size, weight: DesignType.sectionLabel.weight))
+            .tracking(DesignType.tracking(from: DesignType.sectionLabel))
+            .textCase(.uppercase)
+            .foregroundStyle(DesignText.secondary)
+    }
+
+    // MARK: - Bottom nav
+
+    private var bottomNav: some View {
+        HStack {
+            Button { nav.isPopoverVisible = true } label: {
+                Image(systemName: "line.3.horizontal")
+                    .font(.system(size: 16, weight: .medium))
+                    .foregroundStyle(DesignText.secondary)
+                    .frame(width: 32, height: 32)
+            }
+            .buttonStyle(.plain)
+            Spacer()
+            Text("navidrome-sync")
+                .font(.system(size: 11, weight: .semibold))
+                .tracking(DesignType.tracking(from: DesignType.sectionLabel))
+                .textCase(.uppercase)
+                .foregroundStyle(DesignText.secondary)
+        }
+        .padding(.horizontal, DesignSpacing.lg)
+        .padding(.vertical, DesignSpacing.md)
+        .background(DesignBg.cream)
+    }
+
+    // MARK: - Computed info
+
+    private var appVersion: String {
+        let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "—"
+        let build   = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "—"
+        return "\(version) (\(build))"
+    }
+
+    private var lastSyncedText: String {
+        // AppConfig does not currently expose lastSyncedDate; use store's last activity as proxy
+        return "—"
+    }
+
+    // MARK: - Actions
 
     private func logout() {
         store.disconnect()
@@ -226,9 +351,8 @@ struct SettingsView: View {
         AppConfig.syncServiceURL = trimmed.isEmpty ? nil : trimmed
     }
 
-    private func formatBytes(_ bytes: Int64) -> String {
-        let formatter = ByteCountFormatter()
-        formatter.countStyle = .file
-        return formatter.string(fromByteCount: bytes)
+    private func reconnect() {
+        store.disconnect()
+        store.connect()
     }
 }
