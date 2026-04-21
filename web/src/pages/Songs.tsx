@@ -1,8 +1,10 @@
 import { useState, useMemo, useCallback } from 'react';
 import { useSongs } from '../hooks/useNavidrome';
 import { useSyncStore } from '../store/syncStore';
+import { getCoverArtUrl } from '../api/navidrome';
 import type { Song } from '../api/navidrome';
-import SongRow from '../components/SongRow';
+import { useCrateColor } from '../hooks/useCrateColor';
+import { TRANSITIONS, TEXT, BACKGROUNDS, RADIUS, SPACING } from '../styles/design-system';
 
 type SortOption = 'title' | 'artist' | 'album';
 
@@ -20,10 +22,17 @@ function songToNowPlaying(song: Song) {
   };
 }
 
+function formatTime(secs: number) {
+  const m = Math.floor(secs / 60);
+  const s = Math.floor(secs % 60);
+  return `${m}:${s.toString().padStart(2, '0')}`;
+}
+
 export default function Songs() {
   const { songs, loading, error, loadMore } = useSongs();
   const [filter, setFilter] = useState('');
   const [sort, setSort] = useState<SortOption>('title');
+  const crate = useCrateColor();
   const playQueue = useSyncStore((s) => s.playQueue);
   const appendToQueue = useSyncStore((s) => s.appendToQueue);
 
@@ -40,15 +49,9 @@ export default function Songs() {
     }
     const sorted = [...list];
     switch (sort) {
-      case 'title':
-        sorted.sort((a, b) => a.title.localeCompare(b.title));
-        break;
-      case 'artist':
-        sorted.sort((a, b) => a.artist.localeCompare(b.artist));
-        break;
-      case 'album':
-        sorted.sort((a, b) => a.album.localeCompare(b.album));
-        break;
+      case 'title':  sorted.sort((a, b) => a.title.localeCompare(b.title)); break;
+      case 'artist': sorted.sort((a, b) => a.artist.localeCompare(b.artist)); break;
+      case 'album':  sorted.sort((a, b) => a.album.localeCompare(b.album)); break;
     }
     return sorted;
   }, [songs, filter, sort]);
@@ -63,19 +66,36 @@ export default function Songs() {
   );
 
   return (
-    <div className="p-6 max-w-5xl mx-auto">
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold">Songs</h1>
-        <div className="flex items-center gap-2">
+    <div style={{ padding: '32px 28px', background: BACKGROUNDS.cream, minHeight: '100%' }}>
+      {/* Header */}
+      <div className="flex items-center justify-between" style={{ marginBottom: 20 }}>
+        <div>
+          <h1 style={{ fontSize: 32, fontWeight: 700, letterSpacing: '-0.02em', color: TEXT.primary }}>
+            Songs
+          </h1>
+          <p style={{ fontSize: 11, color: TEXT.tertiary, fontVariantNumeric: 'tabular-nums', marginTop: 2 }}>
+            {songs.length} tracks
+          </p>
+        </div>
+
+        {/* Sort pills */}
+        <div className="flex items-center" style={{ gap: 6 }}>
           {(['title', 'artist', 'album'] as SortOption[]).map((opt) => (
             <button
               key={opt}
               onClick={() => setSort(opt)}
-              className={`text-xs px-3 py-1.5 rounded-full border transition-colors ${
-                sort === opt
-                  ? 'border-white/30 bg-white/10 text-white'
-                  : 'border-zinc-700 text-zinc-400 hover:text-white hover:border-zinc-500'
-              }`}
+              style={{
+                fontSize: 11,
+                fontWeight: 600,
+                letterSpacing: '0.04em',
+                padding: '4px 12px',
+                borderRadius: 20,
+                border: `1.5px solid ${sort === opt ? crate.accent : 'rgba(0,0,0,0.12)'}`,
+                background: sort === opt ? crate.device : 'transparent',
+                color: sort === opt ? crate.text : TEXT.secondary,
+                cursor: 'pointer',
+                transition: TRANSITIONS.crateColor,
+              }}
             >
               {opt.charAt(0).toUpperCase() + opt.slice(1)}
             </button>
@@ -84,39 +104,58 @@ export default function Songs() {
       </div>
 
       {/* Filter */}
-      <div className="mb-6">
+      <div style={{ marginBottom: 20 }}>
         <input
           type="text"
           value={filter}
           onChange={(e) => setFilter(e.target.value)}
           placeholder="Filter songs…"
-          className="w-full max-w-sm bg-zinc-900 border border-zinc-800 rounded-lg px-4 py-2 text-sm text-zinc-100 placeholder-zinc-600 focus:outline-none focus:border-zinc-600"
+          style={{
+            width: '100%',
+            maxWidth: 320,
+            background: 'rgba(0,0,0,0.06)',
+            border: 'none',
+            borderRadius: RADIUS.pill,
+            padding: '7px 14px',
+            fontSize: 13,
+            color: TEXT.primary,
+            outline: 'none',
+          }}
         />
       </div>
 
-      {error && <p className="text-red-400 text-sm mb-4">{error}</p>}
+      {error && <p style={{ color: '#D63030', fontSize: 13, marginBottom: 12 }}>{error}</p>}
 
       {loading && songs.length === 0 ? (
-        <p className="text-zinc-500 text-center py-8">Loading songs…</p>
+        <p style={{ color: TEXT.tertiary, textAlign: 'center', padding: '48px 0' }}>Loading songs…</p>
       ) : displayed.length === 0 ? (
-        <p className="text-zinc-500 text-center py-8">No songs found</p>
+        <p style={{ color: TEXT.tertiary, textAlign: 'center', padding: '48px 0' }}>No songs found</p>
       ) : (
-        <div>
-          {displayed.map((song) => (
-            <SongRow
+        <div style={{ borderTop: '1px solid rgba(0,0,0,0.06)' }}>
+          {displayed.map((song, i) => (
+            <SongItem
               key={song.id}
               song={song}
+              index={i + 1}
+              crate={crate}
               onPlay={() => handlePlay(song)}
-              menuItems={[
-                { label: 'Play', onClick: () => handlePlay(song) },
-                { label: 'Add to Queue', onClick: () => appendToQueue(songToNowPlaying(song)) },
-              ]}
+              onAddToQueue={() => appendToQueue(songToNowPlaying(song))}
             />
           ))}
           {songs.length >= 50 && (
             <button
               onClick={() => loadMore(songs.length)}
-              className="mt-4 w-full py-2 text-sm text-zinc-400 hover:text-white border border-zinc-800 rounded-lg hover:border-zinc-600 transition-colors"
+              style={{
+                marginTop: SPACING.md,
+                width: '100%',
+                padding: '10px',
+                fontSize: 13,
+                color: TEXT.secondary,
+                background: 'transparent',
+                border: '1px solid rgba(0,0,0,0.1)',
+                borderRadius: RADIUS.md,
+                cursor: 'pointer',
+              }}
             >
               Load more
             </button>
@@ -126,3 +165,108 @@ export default function Songs() {
     </div>
   );
 }
+
+function SongItem({
+  song,
+  index,
+  crate,
+  onPlay,
+  onAddToQueue,
+}: {
+  song: Song;
+  index: number;
+  crate: ReturnType<typeof useCrateColor>;
+  onPlay: () => void;
+  onAddToQueue: () => void;
+}) {
+  const [hovered, setHovered] = useState(false);
+
+  return (
+    <div
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: SPACING.md,
+        height: 58,
+        padding: '0 4px',
+        borderBottom: '1px solid rgba(0,0,0,0.05)',
+        background: hovered ? BACKGROUNDS.creamHover : 'transparent',
+        cursor: 'pointer',
+        transition: 'background 0.12s ease',
+      }}
+      onClick={onPlay}
+      title={`Play ${song.title}`}
+    >
+      {/* Track number */}
+      <span
+        style={{
+          width: 28,
+          textAlign: 'right',
+          fontSize: 11,
+          color: TEXT.muted,
+          fontVariantNumeric: 'tabular-nums',
+          flexShrink: 0,
+        }}
+      >
+        {index}
+      </span>
+
+      {/* Art */}
+      <div
+        style={{
+          width: 36,
+          height: 36,
+          borderRadius: RADIUS.sm,
+          overflow: 'hidden',
+          flexShrink: 0,
+          background: crate.device,
+        }}
+      >
+        <img
+          src={getCoverArtUrl(song.coverArt, 80)}
+          alt=""
+          style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+        />
+      </div>
+
+      {/* Info */}
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <p style={{ fontSize: 13, fontWeight: 600, color: TEXT.primary, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          {song.title}
+        </p>
+        <p style={{ fontSize: 10, color: TEXT.secondary, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          {song.artist} · {song.album}
+        </p>
+      </div>
+
+      {/* Duration */}
+      <span style={{ fontSize: 11, color: TEXT.muted, fontVariantNumeric: 'tabular-nums', flexShrink: 0 }}>
+        {formatTime(song.duration)}
+      </span>
+
+      {/* Add to queue (hovered) */}
+      {hovered && (
+        <button
+          onClick={(e) => { e.stopPropagation(); onAddToQueue(); }}
+          style={{
+            fontSize: 11,
+            color: crate.accent,
+            background: crate.pillBg,
+            border: 'none',
+            borderRadius: RADIUS.pill,
+            padding: '3px 10px',
+            cursor: 'pointer',
+            flexShrink: 0,
+            transition: TRANSITIONS.crateColor,
+          }}
+        >
+          + Queue
+        </button>
+      )}
+    </div>
+  );
+}
+
+

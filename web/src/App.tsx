@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react';
 import { BrowserRouter, Routes, Route, useLocation } from 'react-router-dom';
 import { useWebSocket } from './hooks/useWebSocket';
+import { useCrateColor } from './hooks/useCrateColor';
+import { TRANSITIONS } from './styles/design-system';
 import NowPlaying from './pages/NowPlaying';
 import Albums from './pages/Albums';
 import Artists from './pages/Artists';
@@ -11,47 +12,30 @@ import Genres from './pages/Genres';
 import GenreDetail from './pages/GenreDetail';
 import AlbumDetailPage from './pages/AlbumDetailPage';
 import PlaylistDetailPage from './pages/PlaylistDetailPage';
+import SearchPage from './pages/SearchPage';
+import SettingsPage from './pages/SettingsPage';
 import NowPlayingBar from './components/NowPlayingBar';
 import AudioManager from './components/AudioManager';
 import Sidebar from './components/Sidebar';
-import { useSyncStore } from './store/syncStore';
-import { getCoverArtUrl } from './api/navidrome';
-import { getDominantColor, type RGB } from './utils/dominantColor';
 
 function AppContent() {
   useWebSocket();
   const location = useLocation();
+  const crate = useCrateColor();
   const isNowPlaying = location.pathname === '/';
-  const coverArtId = useSyncStore((s) => s.nowPlaying?.coverArtId);
-  const [color, setColor] = useState<RGB | null>(null);
-
-  useEffect(() => {
-    if (!coverArtId) { setColor(null); return; }
-    let cancelled = false;
-    getDominantColor(getCoverArtUrl(coverArtId, 80)).then((c) => {
-      if (!cancelled) setColor(c);
-    });
-    return () => { cancelled = true; };
-  }, [coverArtId]);
-
-  const mainBg = color
-    ? {
-        background: `linear-gradient(to bottom, rgba(${color.r},${color.g},${color.b},0.45) 0%, rgba(${color.r},${color.g},${color.b},0.25) 40%, rgba(${color.r},${color.g},${color.b},0.1) 100%)`,
-      }
-    : undefined;
-
-  const sidebarBg = color
-    ? {
-        background: `linear-gradient(to bottom, rgba(${color.r},${color.g},${color.b},0.25) 0%, rgba(${color.r},${color.g},${color.b},0.1) 100%)`,
-      }
-    : undefined;
 
   return (
-    <div className="flex h-screen bg-zinc-950 text-zinc-100">
-      <Sidebar bgStyle={sidebarBg} />
+    <div
+      className="flex h-screen overflow-hidden"
+      style={{
+        background: isNowPlaying ? '#0A0A0A' : '#F7F5F0',
+        transition: TRANSITIONS.crateColor,
+      }}
+    >
+      <Sidebar crate={crate} />
 
-      <div className="flex-1 flex flex-col min-w-0" style={mainBg}>
-        <main className={`flex-1 overflow-y-auto ${isNowPlaying ? '' : 'pb-20'}`}>
+      <div className="flex-1 flex flex-col min-w-0 relative">
+        <main className="flex-1 overflow-y-auto" style={{ paddingBottom: isNowPlaying ? 0 : 80 }}>
           <Routes>
             <Route path="/" element={<NowPlaying />} />
             <Route path="/albums" element={<Albums />} />
@@ -63,10 +47,12 @@ function AppContent() {
             <Route path="/genres/:name" element={<GenreDetail />} />
             <Route path="/playlists" element={<Playlists />} />
             <Route path="/playlists/:id" element={<PlaylistDetailPage />} />
+            <Route path="/search" element={<SearchPage />} />
+            <Route path="/settings" element={<SettingsPage />} />
           </Routes>
         </main>
 
-        {!isNowPlaying && <NowPlayingBar />}
+        {!isNowPlaying && <NowPlayingBar crate={crate} />}
         <AudioManager />
       </div>
     </div>
