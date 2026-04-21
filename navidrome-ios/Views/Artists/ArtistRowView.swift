@@ -10,8 +10,8 @@ struct ArtistRowView: View {
                 avatar
 
                 Text(artist.name)
-                    .font(.system(size: 38 / 2, weight: .medium, design: .default))
-                    .foregroundStyle(.white)
+                    .font(.body)
+                    .foregroundStyle(.primary)
                     .lineLimit(1)
 
                 Spacer()
@@ -26,7 +26,6 @@ struct ArtistRowView: View {
                 .padding(.leading, 80)
                 .padding(.trailing, 30)
         }
-        .background(Color.black)
         .task(id: artist.id) {
             guard imageURL == nil else { return }
             do {

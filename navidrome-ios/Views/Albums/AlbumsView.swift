@@ -36,47 +36,61 @@ enum AlbumSortOrder: String, CaseIterable {
 
 struct AlbumsView: View {
     @EnvironmentObject private var store: SyncStore
-    @State private var albums: [Album] = []
-    @State private var seenIDs: Set<String> = []
-    @State private var isLoading = false
-    @State private var hasMore = true
-    @State private var currentOffset = 0
-    @State private var errorMessage: String?
+    @EnvironmentObject private var musicStore: MusicLibraryStore
     @State private var sortOrder: AlbumSortOrder = .alphabeticalByName
 
-    private let pageSize = 500
+    private let columns = [GridItem(.adaptive(minimum: 160), spacing: 16)]
+
+    private var currentState: MusicLibraryStore.AlbumListState? {
+        musicStore.albumListStates[sortOrder]
+    }
 
     var body: some View {
         ScrollView {
-            if isLoading && albums.isEmpty {
+            if let state = currentState {
+                if state.isLoading && state.albums.isEmpty {
+                    ProgressView()
+                        .padding(.top, 60)
+                } else if let errorMessage = state.errorMessage, state.albums.isEmpty {
+                    VStack(spacing: 12) {
+                        Image(systemName: "exclamationmark.triangle")
+                            .font(.largeTitle)
+                            .foregroundStyle(.secondary)
+                        Text(errorMessage)
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal)
+                        Button("Retry") {
+                            Task { await musicStore.loadAlbums(sortOrder: sortOrder, force: true) }
+                        }
+                        .buttonStyle(.bordered)
+                    }
+                    .padding(.top, 60)
+                } else {
+                    LazyVGrid(columns: columns, spacing: 16) {
+                        ForEach(state.albums) { album in
+                            NavigationLink(value: album) {
+                                albumCell(album)
+                            }
+                            .buttonStyle(.plain)
+                            .onAppear {
+                                if album.id == state.albums.last?.id {
+                                    Task { await musicStore.loadNextPage(sortOrder: sortOrder) }
+                                }
+                            }
+                        }
+                    }
+                    .padding()
+
+                    if state.isLoading {
+                        ProgressView()
+                            .padding(.bottom, 16)
+                    }
+                }
+            } else {
                 ProgressView()
                     .padding(.top, 60)
-            } else if let errorMessage, albums.isEmpty {
-                VStack(spacing: 12) {
-                    Image(systemName: "exclamationmark.triangle")
-                        .font(.largeTitle)
-                        .foregroundStyle(.secondary)
-                    Text(errorMessage)
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                        .multilineTextAlignment(.center)
-                        .padding(.horizontal)
-                    Button("Retry") {
-                        Task { await loadAllAlbums(force: true) }
-                    }
-                    .buttonStyle(.bordered)
-                }
-                .padding(.top, 60)
-            } else {
-                AlbumGridView(albums: albums)
-
-                if hasMore {
-                    ProgressView()
-                        .padding()
-                        .onAppear {
-                            Task { await loadNextPage() }
-                        }
-                }
             }
         }
         .background { store.dominantBackgroundColor.ignoresSafeArea() }
@@ -88,7 +102,7 @@ struct AlbumsView: View {
                         Button {
                             guard sortOrder != order else { return }
                             sortOrder = order
-                            Task { await loadAllAlbums(force: true) }
+                            Task { await musicStore.loadAlbums(sortOrder: order) }
                         } label: {
                             Label(order.label, systemImage: order.icon)
                         }
@@ -100,49 +114,25 @@ struct AlbumsView: View {
             }
         }
         .task {
-            await loadAllAlbums()
+            await musicStore.loadAlbums(sortOrder: sortOrder)
         }
     }
 
-    private func loadAllAlbums(force: Bool = false) async {
-        guard force || albums.isEmpty else { return }
-        albums = []
-        seenIDs = []
-        currentOffset = 0
-        hasMore = true
-        errorMessage = nil
-        isLoading = true
-        defer { isLoading = false }
-        do {
-            let batch = try await NavidromeClient.shared.getAlbums(
-                type: sortOrder.rawValue, size: pageSize, offset: 0
-            )
-            let unique = batch.filter { seenIDs.insert($0.id).inserted }
-            albums = unique
-            currentOffset = batch.count
-            hasMore = batch.count >= pageSize
-            if albums.isEmpty {
-                errorMessage = "No albums found."
-            }
-        } catch {
-            errorMessage = "Could not load albums.\n\(error.localizedDescription)"
-        }
-    }
+    private func albumCell(_ album: Album) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            CoverArtImage(id: album.coverArt, size: 300)
+                .aspectRatio(1, contentMode: .fill)
+                .clipShape(RoundedRectangle(cornerRadius: 8))
 
-    private func loadNextPage() async {
-        guard hasMore, !isLoading else { return }
-        isLoading = true
-        defer { isLoading = false }
-        do {
-            let batch = try await NavidromeClient.shared.getAlbums(
-                type: sortOrder.rawValue, size: pageSize, offset: currentOffset
-            )
-            let unique = batch.filter { seenIDs.insert($0.id).inserted }
-            albums.append(contentsOf: unique)
-            currentOffset += batch.count
-            hasMore = batch.count >= pageSize
-        } catch {
-            print("[albums] failed to load page: \(error)")
+            Text(album.name)
+                .font(.subheadline)
+                .fontWeight(.medium)
+                .lineLimit(1)
+
+            Text(album.artist)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
         }
     }
 }

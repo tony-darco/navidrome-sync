@@ -17,12 +17,14 @@ struct ContentView: View {
                     }
                     .toolbarBackground(.visible, for: .tabBar)
 
-                LibraryView(path: $libraryPath)
-                    .tag(1)
-                    .tabItem {
-                        Label("Library", systemImage: "books.vertical")
-                    }
-                    .toolbarBackground(.visible, for: .tabBar)
+                NavigationStack(path: $libraryPath) {
+                    LibraryView()
+                }
+                .tag(1)
+                .tabItem {
+                    Label("Library", systemImage: "books.vertical")
+                }
+                .toolbarBackground(.visible, for: .tabBar)
 
                 SearchView()
                     .tag(2)
@@ -86,106 +88,117 @@ struct NowPlayingBar: View {
 
     var body: some View {
         if let song = store.nowPlaying {
-            HStack(spacing: 12) {
-                // Cover art — navigates to Now Playing tab
-                Button {
-                    withAnimation(.easeInOut(duration: 0.25)) {
-                        selectedTab = 0
+            if #available(iOS 26.0, *) {
+                HStack(spacing: 12) {
+                    // Cover art — navigates to Now Playing tab
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.25)) {
+                            selectedTab = 0
+                        }
+                    } label: {
+                        CoverArtImage(id: song.coverArtId, size: 80)
+                            .frame(width: 44, height: 44)
+                            .clipShape(RoundedRectangle(cornerRadius: 6))
                     }
-                } label: {
-                    CoverArtImage(id: song.coverArtId, size: 80)
-                        .frame(width: 44, height: 44)
-                        .clipShape(RoundedRectangle(cornerRadius: 6))
-                }
-                .buttonStyle(.plain)
-
-                // Song info — title and artist are separate tap targets
-                VStack(alignment: .leading, spacing: 2) {
-                    if let albumId = song.albumId, !albumId.isEmpty {
-                        Button {
-                            showAlbumDetail = true
-                        } label: {
+                    .buttonStyle(.plain)
+                    
+                    // Song info — title and artist are separate tap targets
+                    VStack(alignment: .leading, spacing: 2) {
+                        if let albumId = song.albumId, !albumId.isEmpty {
+                            Button {
+                                showAlbumDetail = true
+                            } label: {
+                                Text(song.title)
+                                    .font(.subheadline)
+                                    .fontWeight(.medium)
+                                    .lineLimit(1)
+                                    .foregroundStyle(.primary)
+                            }
+                            .buttonStyle(.plain)
+                        } else {
                             Text(song.title)
                                 .font(.subheadline)
                                 .fontWeight(.medium)
                                 .lineLimit(1)
                                 .foregroundStyle(.primary)
                         }
-                        .buttonStyle(.plain)
-                    } else {
-                        Text(song.title)
-                            .font(.subheadline)
-                            .fontWeight(.medium)
-                            .lineLimit(1)
-                            .foregroundStyle(.primary)
-                    }
-
-                    if let artistId = song.artistId, !artistId.isEmpty {
-                        Button {
-                            showArtistDetail = true
-                        } label: {
+                        
+                        if let artistId = song.artistId, !artistId.isEmpty {
+                            Button {
+                                showArtistDetail = true
+                            } label: {
+                                Text(song.artist)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                    .lineLimit(1)
+                            }
+                            .buttonStyle(.plain)
+                        } else {
                             Text(song.artist)
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                                 .lineLimit(1)
                         }
-                        .buttonStyle(.plain)
+                    }
+                    
+                    Spacer()
+                    
+                    // Playback controls — shared GlassEffectContainer for morph continuity
+                    if #available(iOS 26.0, *) {
+                        GlassEffectContainer {
+                            HStack(spacing: 0) {
+                                Button {
+                                    store.prev()
+                                } label: {
+                                    Image(systemName: "backward.fill")
+                                        .font(.title3)
+                                        .frame(width: 36, height: 36)
+                                }
+                                .glassEffect(.regular.interactive(), in: Circle())
+                                
+                                Button {
+                                    if store.isPlaying { store.pause() } else { store.play() }
+                                } label: {
+                                    Image(systemName: store.isPlaying ? "pause.fill" : "play.fill")
+                                        .font(.title3)
+                                        .frame(width: 36, height: 36)
+                                        .contentTransition(.symbolEffect(.replace))
+                                }
+                                .glassEffect(.regular.interactive(), in: Circle())
+                                
+                                Button {
+                                    store.next()
+                                } label: {
+                                    Image(systemName: "forward.fill")
+                                        .font(.title3)
+                                        .frame(width: 36, height: 36)
+                                }
+                                .glassEffect(.regular.interactive(), in: Circle())
+                            }
+                        }
                     } else {
-                        Text(song.artist)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
+                        // Fallback on earlier versions
                     }
                 }
-
-                Spacer()
-
-                // Playback controls
-                Button {
-                    store.prev()
-                } label: {
-                    Image(systemName: "backward.fill")
-                        .font(.title3)
-                        .frame(width: 36, height: 36)
-                }
-                .buttonStyle(.plain)
-
-                Button {
-                    if store.isPlaying { store.pause() } else { store.play() }
-                } label: {
-                    Image(systemName: store.isPlaying ? "pause.fill" : "play.fill")
-                        .font(.title3)
-                        .frame(width: 36, height: 36)
-                }
-                .buttonStyle(.plain)
-
-                Button {
-                    store.next()
-                } label: {
-                    Image(systemName: "forward.fill")
-                        .font(.title3)
-                        .frame(width: 36, height: 36)
-                }
-                .buttonStyle(.plain)
-            }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 8)
-            .background {
-                store.dominantBackgroundColor
-            }
-            .sheet(isPresented: $showAlbumDetail) {
-                if let albumId = song.albumId, !albumId.isEmpty {
-                    NavigationStack {
-                        AlbumDetailView(albumId: albumId)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 10)
+                .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 28))
+                .sheet(isPresented: $showAlbumDetail) {
+                    if let albumId = song.albumId, !albumId.isEmpty {
+                        NavigationStack {
+                            AlbumDetailView(albumId: albumId)
+                        }
                     }
                 }
-            }
-            .sheet(isPresented: $showArtistDetail) {
-                if let artistId = song.artistId, !artistId.isEmpty {
-                    NavigationStack {
-                        ArtistDetailView(artistId: artistId, artistName: song.artist)
+                .sheet(isPresented: $showArtistDetail) {
+                    if let artistId = song.artistId, !artistId.isEmpty {
+                        NavigationStack {
+                            ArtistDetailView(artistId: artistId, artistName: song.artist)
+                        }
                     }
                 }
+            } else {
+                // Fallback on earlier versions
             }
         }
     }

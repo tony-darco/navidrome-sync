@@ -5,17 +5,18 @@ struct AlbumDetailView: View {
 
     @EnvironmentObject private var store: SyncStore
     @EnvironmentObject private var downloadManager: DownloadManager
-    @State private var album: Album?
-    @State private var songs: [Song] = []
-    @State private var isLoading = true
+    @EnvironmentObject private var musicStore: MusicLibraryStore
     @State private var dominantColor: Color = .clear
+
+    private var detail: MusicLibraryStore.AlbumDetail? { musicStore.albumDetails[albumId] }
+    private var isLoading: Bool { detail == nil }
 
     var body: some View {
         ScrollView {
             if isLoading {
                 ProgressView()
                     .padding(.top, 60)
-            } else if let album {
+            } else if let album = detail?.album {
                 VStack(spacing: 0) {
                     albumHeader(album)
                     trackList
@@ -24,10 +25,10 @@ struct AlbumDetailView: View {
             }
         }
         .background(backgroundGradient)
-        .navigationTitle(album?.name ?? "Album")
+        .navigationTitle(detail?.album.name ?? "Album")
         .navigationBarTitleDisplayMode(.inline)
         .task {
-            await loadAlbum()
+            await musicStore.loadAlbumDetail(id: albumId)
             await extractDominantColor()
         }
     }
@@ -105,7 +106,7 @@ struct AlbumDetailView: View {
                 .buttonStyle(.plain)
 
                 Button {
-                    downloadManager.download(songs: songs)
+                    downloadManager.download(songs: detail?.songs ?? [])
                 } label: {
                     Image(systemName: "arrow.down.circle")
                         .font(.title3)
@@ -124,7 +125,8 @@ struct AlbumDetailView: View {
     // MARK: - Track list
 
     private var trackList: some View {
-        VStack(spacing: 0) {
+        let songs = detail?.songs ?? []
+        return VStack(spacing: 0) {
             ForEach(Array(songs.enumerated()), id: \.element.id) { index, song in
                 Button { playTrack(at: index) } label: {
                     HStack(spacing: 12) {
@@ -198,30 +200,21 @@ struct AlbumDetailView: View {
     // MARK: - Actions
 
     private func playAll() {
+        let songs = detail?.songs ?? []
         guard !songs.isEmpty else { return }
         let queue = songs.map { $0.toNowPlayingSong() }
         store.playQueue(queue, startIndex: 0)
     }
 
     private func playTrack(at index: Int) {
+        let songs = detail?.songs ?? []
         let queue = songs.map { $0.toNowPlayingSong() }
         store.playQueue(queue, startIndex: index)
     }
 
-    private func loadAlbum() async {
-        defer { isLoading = false }
-        do {
-            let result = try await NavidromeClient.shared.getAlbum(id: albumId)
-            album = result.album
-            songs = result.songs
-        } catch {
-            print("[album] failed to load: \(error)")
-        }
-    }
-
     private func extractDominantColor() async {
         guard AppConfig.coloredAlbumBackground else { return }
-        let coverArtId = album?.coverArt ?? ""
+        let coverArtId = detail?.album.coverArt ?? ""
         guard !coverArtId.isEmpty else { return }
         if let image = await NavidromeClient.shared.fetchCoverArt(id: coverArtId, size: 50) {
             dominantColor = image.dominantColor()

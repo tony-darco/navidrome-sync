@@ -14,6 +14,7 @@ struct NavidromeApp: App {
     @StateObject private var syncStore = SyncStore()
     @StateObject private var playlistStore = PlaylistStore()
     @StateObject private var downloadManager = DownloadManager.shared
+    @StateObject private var musicLibraryStore = MusicLibraryStore()
     @State private var isLoggedIn = AppConfig.isLoggedIn
 
     var body: some Scene {
@@ -23,9 +24,11 @@ struct NavidromeApp: App {
                     .environmentObject(syncStore)
                     .environmentObject(playlistStore)
                     .environmentObject(downloadManager)
+                    .environmentObject(musicLibraryStore)
                     .preferredColorScheme(.dark)
                     .onAppear {
                         playlistStore.bind(to: syncStore)
+                        syncStore.bind(to: musicLibraryStore)
                         syncStore.connect()
                     }
             } else {
