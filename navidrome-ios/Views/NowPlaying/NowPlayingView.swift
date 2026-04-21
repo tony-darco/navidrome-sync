@@ -97,8 +97,6 @@ struct NowPlayingView: View {
 
     private var statusBar: some View {
         HStack(spacing: DesignSpacing.sm) {
-            Text(Date(), style: .time)
-                .font(.system(size: 11, weight: .medium, design: .monospaced))
             Spacer()
             Image(systemName: "wifi")
                 .font(.system(size: 11))
@@ -190,8 +188,8 @@ struct NowPlayingView: View {
             // Crate device color — transitions via CrateColorState.update()
             Rectangle().fill(crateState.current.device)
 
-            VStack(spacing: DesignSpacing.md) {
-                Spacer(minLength: DesignSpacing.lg)
+            VStack(spacing: 0) {
+                Spacer()
 
                 ClickWheelView(
                     crate:       crateState.current,
@@ -208,27 +206,13 @@ struct NowPlayingView: View {
                     }
                 )
 
-                trackDots
-
-                Spacer(minLength: DesignSpacing.xxl)
+                Spacer()
             }
+            .padding(.bottom, DesignDim.bottomNavHeight)
 
             bottomBar
         }
         .frame(height: height)
-    }
-
-    // MARK: - Track indicator dots
-
-    private var trackDots: some View {
-        let items = buildDotItems(queue: store.queue, index: store.queueIndex)
-        return HStack(spacing: 5) {
-            ForEach(items, id: \.id) { item in
-                Circle()
-                    .fill(item.dotColor)
-                    .frame(width: item.isActive ? 9 : 6, height: item.isActive ? 9 : 6)
-            }
-        }
     }
 
     // MARK: - Bottom bar
@@ -239,9 +223,9 @@ struct NowPlayingView: View {
                 nav.isPopoverVisible = true
             } label: {
                 Image(systemName: "line.3.horizontal")
-                    .font(.system(size: 16, weight: .medium))
+                    .font(.system(size: 22, weight: .medium))
                     .foregroundStyle(crateState.current.text)
-                    .frame(width: 32, height: 32)
+                    .frame(width: 44, height: 44)
             }
             .buttonStyle(.plain)
 
@@ -255,29 +239,6 @@ struct NowPlayingView: View {
         }
         .padding(.horizontal, DesignSpacing.lg)
         .padding(.bottom, DesignSpacing.md)
-    }
-}
-
-// MARK: - DotItem
-
-private struct DotItem: Identifiable {
-    let id:       String
-    let dotColor: Color
-    let isActive: Bool
-}
-
-private func buildDotItems(queue: [NowPlayingSong], index: Int) -> [DotItem] {
-    guard !queue.isEmpty else { return [] }
-    let maxDots = 9
-    let half    = maxDots / 2
-    let start   = max(0, min(index - half, queue.count - maxDots))
-    let end     = min(queue.count, start + maxDots)
-    return (start..<end).map { i in
-        DotItem(
-            id:       queue[i].songId,
-            dotColor: getCrateColor(albumId: queue[i].albumId ?? "a").dot,
-            isActive: i == index
-        )
     }
 }
 
