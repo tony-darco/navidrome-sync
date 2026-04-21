@@ -38,15 +38,27 @@ final class SyncStore: ObservableObject {
 
     // MARK: - Private
 
-    private let syncClient = SyncClient()
-    let audioPlayer = AudioPlayer()
+    private let syncClient: SyncClientProtocol
+    private let navidromeClient: NavidromeClientProtocol
+    private let downloadManager: DownloadManaging
+    let audioPlayer: AudioPlayer
     private var positionReportingTask: Task<Void, Never>?
     private var cancellables = Set<AnyCancellable>()
     private var scrobbledSongId: String?
+    weak var musicStore: MusicLibraryStore?
 
     // MARK: - Init
 
-    init() {
+    init(
+        syncClient: SyncClientProtocol = SyncClient(),
+        navidromeClient: NavidromeClientProtocol = NavidromeClient.shared,
+        downloadManager: DownloadManaging = DownloadManager.shared,
+        audioPlayer: AudioPlayer = AudioPlayer()
+    ) {
+        self.syncClient = syncClient
+        self.navidromeClient = navidromeClient
+        self.downloadManager = downloadManager
+        self.audioPlayer = audioPlayer
         myClientId = AppConfig.clientId
         setupBindings()
     }
@@ -126,9 +138,14 @@ final class SyncStore: ObservableObject {
 
     // MARK: - Connection
 
+    func bind(to musicStore: MusicLibraryStore) {
+        self.musicStore = musicStore
+    }
+
     /// Connect to the Go sync service. Only works if a sync service URL is configured
     /// (separate from the Navidrome server URL).
     func connect() {
+        guard !AppConfig.offlineMode else { return }
         guard let base = AppConfig.syncServiceURL, !base.isEmpty else { return }
         syncClient.connect(baseURL: base, clientId: myClientId)
         startPositionReporting()
@@ -231,22 +248,26 @@ final class SyncStore: ObservableObject {
         guard nextIndex < queue.count else {
             // If repeat all, wrap around to first track
             if repeatMode == .all && !queue.isEmpty {
-                queueIndex = 0
-                let song = queue[0]
-                loadAndPlay(song)
-                if isConnected {
-                    sendNowPlaying(song)
-                    sendQueueToHub()
+                if let idx = nextAvailableIndex(from: 0, forward: true) {
+                    queueIndex = idx
+                    let song = queue[idx]
+                    loadAndPlay(song)
+                    if isConnected {
+                        sendNowPlaying(song)
+                        sendQueueToHub()
+                    }
                 }
             }
             return
         }
-        queueIndex = nextIndex
-        let song = queue[nextIndex]
-        loadAndPlay(song)
-        if isConnected {
-            sendNowPlaying(song)
-            sendQueueToHub()
+        if let idx = nextAvailableIndex(from: nextIndex, forward: true) {
+            queueIndex = idx
+            let song = queue[idx]
+            loadAndPlay(song)
+            if isConnected {
+                sendNowPlaying(song)
+                sendQueueToHub()
+            }
         }
     }
 
@@ -326,11 +347,12 @@ final class SyncStore: ObservableObject {
         let newStarred = !(song.starred ?? false)
         nowPlaying?.starred = newStarred
         let songId = song.songId
+        musicStore?.updateSongStar(songId: songId, starred: newStarred)
         Task {
             if newStarred {
-                try? await NavidromeClient.shared.star(id: songId)
+                try? await navidromeClient.star(id: songId)
             } else {
-                try? await NavidromeClient.shared.unstar(id: songId)
+                try? await navidromeClient.unstar(id: songId)
             }
         }
         if isConnected {
@@ -353,7 +375,7 @@ final class SyncStore: ObservableObject {
         // Scrobble if not yet done (covers short songs or seeks past 50%)
         if let song = nowPlaying, scrobbledSongId != song.songId {
             scrobbledSongId = song.songId
-            Task { try? await NavidromeClient.shared.scrobble(songId: song.songId) }
+            Task { try? await navidromeClient.scrobble(songId: song.songId) }
         }
         switch repeatMode {
         case .one:
@@ -376,16 +398,36 @@ final class SyncStore: ObservableObject {
         startPositionReporting()
     }
 
+    /// Find the next playable index in the queue, skipping non-downloaded songs in offline mode.
+    private func nextAvailableIndex(from start: Int, forward: Bool) -> Int? {
+        guard !queue.isEmpty else { return nil }
+        guard AppConfig.offlineMode else { return start < queue.count ? start : nil }
+        let step = forward ? 1 : -1
+        var idx = start
+        let count = queue.count
+        for _ in 0..<count {
+            guard idx >= 0 && idx < count else { return nil }
+            if downloadManager.isDownloaded(songId: queue[idx].songId) {
+                return idx
+            }
+            idx += step
+        }
+        return nil
+    }
+
     // MARK: - Private helpers
 
     private func loadAndPlay(_ song: NowPlayingSong) {
         nowPlaying = song
         scrobbledSongId = nil
-        guard let url = NavidromeClient.shared.streamURL(songId: song.songId) else { return }
+        // Prefer local file if downloaded, otherwise stream.
+        let url: URL? = downloadManager.localURL(for: song.songId)
+            ?? navidromeClient.streamURL(songId: song.songId)
+        guard let url else { return }
         audioPlayer.play(url: url, position: song.positionSecs)
         updateLockScreen(song: song)
         Task {
-            let artwork = await NavidromeClient.shared.fetchCoverArt(id: song.coverArtId)
+            let artwork = await navidromeClient.fetchCoverArt(id: song.coverArtId, size: 300)
             audioPlayer.updateNowPlayingInfo(
                 title: song.title,
                 artist: song.artist,
@@ -472,7 +514,8 @@ final class SyncStore: ObservableObject {
                    song.durationSecs > 0,
                    audioPlayer.currentTime >= Double(song.durationSecs) * 0.3 {
                     scrobbledSongId = song.songId
-                    Task { try? await NavidromeClient.shared.scrobble(songId: song.songId) }
+                    Task { try? await navidromeClient.scrobble(songId: song.songId) }
+                    downloadManager.enqueueIfAutoCache(song: song)
                 }
             }
         }
@@ -510,6 +553,7 @@ final class SyncStore: ObservableObject {
                 if nowPlaying?.songId == payload.songId {
                     nowPlaying?.starred = payload.starred
                 }
+                musicStore?.updateSongStar(songId: payload.songId, starred: payload.starred)
             }
         case .error:
             if let payload = envelope.payload?.decode(ErrorPayload.self) {

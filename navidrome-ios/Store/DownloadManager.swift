@@ -1,11 +1,18 @@
 import Combine
 import Foundation
 
+@MainActor
+protocol DownloadManaging: AnyObject {
+    func enqueueIfAutoCache(song: NowPlayingSong)
+    func isDownloaded(songId: String) -> Bool
+    func localURL(for songId: String) -> URL?
+}
+
 /// Manages song downloads using a background URLSession.
 /// Files are stored in Documents/Downloads/Songs/{songId}.{ext}.
 /// Metadata is persisted to Documents/Downloads/metadata.json.
 @MainActor
-final class DownloadManager: NSObject, ObservableObject {
+final class DownloadManager: NSObject, ObservableObject, DownloadManaging {
 
     nonisolated let objectWillChange = ObservableObjectPublisher()
 
@@ -40,11 +47,11 @@ final class DownloadManager: NSObject, ObservableObject {
     /// Debounce timer for metadata persistence.
     private var persistTimer: Timer?
 
+    private let navidromeClient: NavidromeClientProtocol
+    private let sessionConfiguration: URLSessionConfiguration
+
     private lazy var backgroundSession: URLSession = {
-        let config = URLSessionConfiguration.background(withIdentifier: "com.navidromesync.downloads")
-        config.isDiscretionary = false
-        config.sessionSendsLaunchEvents = true
-        return URLSession(configuration: config, delegate: self, delegateQueue: nil)
+        return URLSession(configuration: sessionConfiguration, delegate: self, delegateQueue: nil)
     }()
 
     // MARK: - Directories
@@ -63,7 +70,17 @@ final class DownloadManager: NSObject, ObservableObject {
 
     // MARK: - Init
 
-    override init() {
+    init(
+        sessionConfiguration: URLSessionConfiguration = {
+            let config = URLSessionConfiguration.background(withIdentifier: "com.navidromesync.downloads")
+            config.isDiscretionary = false
+            config.sessionSendsLaunchEvents = true
+            return config
+        }(),
+        navidromeClient: NavidromeClientProtocol = NavidromeClient.shared
+    ) {
+        self.sessionConfiguration = sessionConfiguration
+        self.navidromeClient = navidromeClient
         super.init()
         restoreState()
         // Touch the lazy session so iOS can reconnect after relaunch.
@@ -211,7 +228,7 @@ final class DownloadManager: NSObject, ObservableObject {
 
     private func startDownload(for songId: String) {
         guard var task = taskMap[songId] else { return }
-        guard let url = NavidromeClient.shared.streamURL(songId: songId) else {
+        guard let url = navidromeClient.streamURL(songId: songId) else {
             task.status = .failed(reason: .permanent(statusCode: nil), attempts: task.attempts + 1)
             taskMap[songId] = task
             schedulePersist()
