@@ -174,7 +174,7 @@ enum DesignDim {
     // Bottom nav
     static let bottomNavHeight:  CGFloat = 46
     // Nav popover
-    static let navPopoverWidth:  CGFloat = 148
+    static let navPopoverWidth:  CGFloat = 192
     static let navPopoverRadius: CGFloat = 12
 }
 

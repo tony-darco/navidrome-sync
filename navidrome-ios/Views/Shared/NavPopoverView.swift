@@ -17,10 +17,10 @@ struct NavPopoverView: View {
     @State private var appeared = false
 
     private let items: [(label: String, icon: String, dest: NavPopoverDestination)] = [
-        ("Library",  "♪", .library),
-        ("Albums",   "◉", .albums),
-        ("Search",   "⌕", .search),
-        ("Settings", "⚙", .settings),
+        ("Library",  "music.note.list",  .library),
+        ("Albums",   "square.stack",     .albums),
+        ("Search",   "magnifyingglass",  .search),
+        ("Settings", "gearshape.fill",   .settings),
     ]
 
     var body: some View {
@@ -40,17 +40,17 @@ struct NavPopoverView: View {
                             onNavigate(item.dest)
                         } label: {
                             HStack(spacing: DesignSpacing.sm) {
-                                Text(item.icon)
-                                    .font(.system(size: 14))
-                                    .frame(width: 22, alignment: .center)
+                                Image(systemName: item.icon)
+                                    .font(.system(size: 18))
+                                    .frame(width: 28, alignment: .center)
                                 Text(item.label)
-                                    .font(.system(size: 14, weight: .medium))
+                                    .font(.system(size: 17, weight: .medium))
                                 Spacer()
                             }
                             .foregroundStyle(crate.text)
                             .frame(maxWidth: .infinity)
                             .padding(.horizontal, DesignSpacing.md)
-                            .padding(.vertical, 11)
+                            .padding(.vertical, 14)
                         }
                         .buttonStyle(.plain)
 
