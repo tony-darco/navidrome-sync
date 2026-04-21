@@ -174,8 +174,9 @@ struct DownloadsView: View {
     // MARK: - Row
 
     private func downloadRow(_ task: DownloadTask) -> some View {
-        HStack(spacing: 12) {
-            CoverArtImage(id: task.coverArt, size: 80)
+        let isNowPlaying = task.songId == store.nowPlaying?.songId
+        return HStack(spacing: 12) {
+            CoverArtImage(id: task.coverArt, size: 80, isNowPlaying: isNowPlaying, isPlaying: store.isPlaying)
                 .frame(width: 40, height: 40)
                 .clipShape(RoundedRectangle(cornerRadius: 4))
 

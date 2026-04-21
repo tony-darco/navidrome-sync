@@ -4,6 +4,7 @@ struct PlaylistEditView: View {
     let playlistId: String
     let onDismiss: () -> Void
 
+    @EnvironmentObject private var store: SyncStore
     @EnvironmentObject private var playlistStore: PlaylistStore
     @State private var tracks: [Song] = []
     @State private var playlistName = ""
@@ -77,7 +78,9 @@ struct PlaylistEditView: View {
                 List {
                     ForEach(Array(tracks.enumerated()), id: \.offset) { index, song in
                         HStack(spacing: 12) {
-                            CoverArtImage(id: song.coverArt, size: 80)
+                            CoverArtImage(id: song.coverArt, size: 80,
+                                          isNowPlaying: song.id == store.nowPlaying?.songId,
+                                          isPlaying: store.isPlaying)
                                 .frame(width: 36, height: 36)
                                 .clipShape(RoundedRectangle(cornerRadius: 4))
                             VStack(alignment: .leading, spacing: 2) {

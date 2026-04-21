@@ -149,7 +149,9 @@ struct PlaylistDetailView: View {
             ForEach(Array(entries.enumerated()), id: \.element.id) { index, song in
                 Button { playTrack(at: index, in: entries) } label: {
                     HStack(spacing: 12) {
-                        CoverArtImage(id: song.coverArt, size: 80)
+                        CoverArtImage(id: song.coverArt, size: 80,
+                                      isNowPlaying: song.id == store.nowPlaying?.songId,
+                                      isPlaying: store.isPlaying)
                             .frame(width: 50, height: 50)
                             .clipShape(RoundedRectangle(cornerRadius: 6))
 

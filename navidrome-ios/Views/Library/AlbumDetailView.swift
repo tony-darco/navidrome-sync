@@ -130,10 +130,16 @@ struct AlbumDetailView: View {
             ForEach(Array(songs.enumerated()), id: \.element.id) { index, song in
                 Button { playTrack(at: index) } label: {
                     HStack(spacing: 12) {
-                        Text("\(song.track)")
-                            .font(.body)
-                            .foregroundStyle(.secondary)
-                            .frame(width: 28, alignment: .leading)
+                        let isNowPlaying = song.id == store.nowPlaying?.songId
+                        if isNowPlaying {
+                            WaveformBarsView(isAnimating: store.isPlaying, color: Color.brandPink)
+                                .frame(width: 28, alignment: .leading)
+                        } else {
+                            Text("\(song.track)")
+                                .font(.body)
+                                .foregroundStyle(.secondary)
+                                .frame(width: 28, alignment: .leading)
+                        }
 
                         Text(song.title)
                             .font(.body)

@@ -80,8 +80,9 @@ struct GenreDetailView: View {
     }
 
     private func songRow(_ song: Song) -> some View {
-        HStack(spacing: 12) {
-            CoverArtImage(id: song.coverArt, size: 80)
+        let isNowPlaying = song.id == store.nowPlaying?.songId
+        return HStack(spacing: 12) {
+            CoverArtImage(id: song.coverArt, size: 80, isNowPlaying: isNowPlaying, isPlaying: store.isPlaying)
                 .frame(width: 44, height: 44)
                 .clipShape(RoundedRectangle(cornerRadius: 6))
 

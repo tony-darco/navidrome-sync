@@ -209,6 +209,8 @@ struct NowPlayingBar: View {
 struct CoverArtImage: View {
     let id: String
     var size: Int = 300
+    var isNowPlaying: Bool = false
+    var isPlaying: Bool = false
 
     @State private var image: UIImage?
     @State private var isLoading = false
@@ -225,6 +227,7 @@ struct CoverArtImage: View {
                 placeholder
             }
         }
+        .overlay { NowPlayingOverlay(isNowPlaying: isNowPlaying, isPlaying: isPlaying) }
         .task(id: id) {
             guard !id.isEmpty, !isLoading else { return }
             isLoading = true

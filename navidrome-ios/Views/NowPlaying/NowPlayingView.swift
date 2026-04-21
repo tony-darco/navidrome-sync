@@ -349,6 +349,11 @@ struct QueueSheet: View {
             }
 
             Spacer()
+
+            if isActive {
+                WaveformBarsView(isAnimating: store.isPlaying, color: Color.brandPink)
+                    .padding(.trailing, 4)
+            }
         }
     }
 }
