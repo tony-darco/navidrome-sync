@@ -182,14 +182,14 @@ enum DesignDim {
 
 enum DesignCoverFlow {
     static let artSize:           CGFloat = 180
-    static let spacing:           CGFloat = 230
+    static let spacing:           CGFloat = 180
     static let sideRotateX:       Double  = 52      // degrees
     static let sideScale:         CGFloat = 0.58
     static let sideScaleDecay:    CGFloat = 0.14    // per step
-    static let opacityDecay:      Double  = 0.55    // per step
+    static let opacityDecay:      Double  = 0.22    // per step
     static let reflectionHeight:  CGFloat = 54
     static let reflectionOpacity: Double  = 0.22
-    static let visibleRadius:     Int     = 3
+    static let visibleRadius:     Int     = 5
 }
 
 // MARK: - Animation (mirrors TRANSITIONS)

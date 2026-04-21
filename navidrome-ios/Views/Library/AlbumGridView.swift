@@ -29,10 +29,11 @@ struct AlbumGridView: View {
                 .font(.subheadline)
                 .fontWeight(.medium)
                 .lineLimit(1)
+                .foregroundStyle(DesignText.onDark)
 
             Text(album.artist)
                 .font(.caption)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(DesignText.onDarkMuted)
                 .lineLimit(1)
         }
     }

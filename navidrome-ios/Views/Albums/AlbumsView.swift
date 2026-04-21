@@ -44,10 +44,16 @@ struct AlbumsView: View {
     @Environment(AppNavigationState.self) private var nav
     @Environment(CrateColorState.self) private var crateState
 
-    @State private var sortOrder: AlbumSortOrder = .alphabeticalByName
+    @AppStorage("albumSortOrder") private var sortOrderRaw: String = AlbumSortOrder.alphabeticalByName.rawValue
+    @AppStorage("albumIsGrid") private var isGrid: Bool = false
+
     @State private var focusIndex: Int  = 0
     @State private var dragOffset: CGFloat = 0
-    @State private var showSortMenu: Bool  = false
+    @State private var selectedLetter: String? = nil
+
+    private var sortOrder: AlbumSortOrder {
+        AlbumSortOrder(rawValue: sortOrderRaw) ?? .alphabeticalByName
+    }
 
     private var albums: [Album] {
         musicStore.albumListStates[sortOrder]?.albums ?? []
@@ -61,27 +67,56 @@ struct AlbumsView: View {
     var body: some View {
         @Bindable var nav = nav
 
-        NavigationStack(path: $nav.albumsPath) {
-            GeometryReader { geo in
-                ZStack {
-                    Color(hex: "#0A0A0A").ignoresSafeArea()
+        GeometryReader { geo in
+            ZStack {
+                Color(hex: "#0A0A0A").ignoresSafeArea()
 
-                    if albums.isEmpty {
-                        emptyState
-                    } else {
-                        coverFlow(geo: geo)
-                    }
-
-                    topBar
-                    bottomNav
+                if albums.isEmpty {
+                    emptyState
+                } else if isGrid {
+                    gridView
+                } else {
+                    coverFlow(geo: geo)
                 }
-            }
-            .ignoresSafeArea()
-            .navigationDestination(for: Album.self) { album in
-                AlbumDetailView(albumId: album.id)
+
+                topBar
+
+                // Alphabet scrubber — right edge, only for alpha-sorted CoverFlow
+                if !isGrid, (sortOrder == .alphabeticalByName || sortOrder == .alphabeticalByArtist) {
+                    HStack {
+                        Spacer()
+                        AlphabetScrubber(
+                            letters: scrubberLetters,
+                            activeLetters: Set(scrubberLetters),
+                            selectedLetter: $selectedLetter
+                        )
+                        .padding(.trailing, 4)
+                        .padding(.top, 100)
+                        .padding(.bottom, 20)
+                    }
+                    .allowsHitTesting(true)
+                }
+
+                NavPopoverView(
+                    isVisible: Binding(
+                        get: { nav.isPopoverVisible },
+                        set: { nav.isPopoverVisible = $0 }
+                    ),
+                    crate: crateState.current,
+                    onNavigate: { nav.handlePopoverSelection($0) },
+                    bottomInset: 0
+                )
             }
         }
+        .ignoresSafeArea()
+        .navigationDestination(for: Album.self) { album in
+            AlbumDetailView(albumId: album.id)
+        }
         .task { await musicStore.loadAlbums(sortOrder: sortOrder) }
+        .onChange(of: selectedLetter) { _, letter in
+            guard let letter else { return }
+            jumpToLetter(letter)
+        }
     }
 
     // MARK: - CoverFlow
@@ -184,6 +219,18 @@ struct AlbumsView: View {
         .zIndex(Double(DesignCoverFlow.visibleRadius) - abs)
     }
 
+    // MARK: - Grid view
+
+    private var gridView: some View {
+        ScrollView {
+            AlbumGridView(albums: albums)
+                .padding(.top, 100)
+                .padding(.bottom, 20)
+        }
+        .background(Color(hex: "#0A0A0A"))
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
     // MARK: - Top bar
 
     private var topBar: some View {
@@ -196,36 +243,68 @@ struct AlbumsView: View {
             .frame(height: 100)
             .overlay(alignment: .bottom) {
                 HStack(alignment: .bottom) {
-                    Text("Albums")
-                        .font(.system(size: 28, weight: .bold))
-                        .foregroundStyle(DesignText.onDark)
-                        .padding(.leading, DesignSpacing.lg)
-                        .padding(.bottom, DesignSpacing.md)
-
-                    Spacer()
-
-                    // Sort menu button
-                    Menu {
-                        ForEach(AlbumSortOrder.allCases, id: \.self) { order in
-                            Button {
-                                guard sortOrder != order else { return }
-                                sortOrder = order
-                                focusIndex = 0
-                                Task { await musicStore.loadAlbums(sortOrder: order) }
-                            } label: {
-                                Label(order.label, systemImage: order.icon)
-                            }
-                        }
-                    } label: {
-                        Image(systemName: "arrow.up.arrow.down")
+                    // Hamburger — opens nav popover
+                    Button { nav.isPopoverVisible = true } label: {
+                        Image(systemName: "line.3.horizontal")
                             .font(.system(size: 16, weight: .medium))
                             .foregroundStyle(DesignText.onDark)
                             .padding(DesignSpacing.sm)
                             .background(Color.white.opacity(0.12))
                             .clipShape(Circle())
                     }
+                    .buttonStyle(.plain)
+                    .padding(.leading, DesignSpacing.lg)
+                    .padding(.bottom, DesignSpacing.md)
+
+                    Spacer()
+
+                    Text("Albums")
+                        .font(.system(size: 28, weight: .bold))
+                        .foregroundStyle(DesignText.onDark)
+                        .padding(.bottom, DesignSpacing.md)
+
+                    Spacer()
+
+                    HStack(spacing: DesignSpacing.sm) {
+                        // Now Playing button — only when a track is loaded
+                        if store.nowPlaying != nil {
+                            Button { nav.navigate(to: .nowPlaying) } label: {
+                                Image(systemName: "music.note")
+                                    .font(.system(size: 16, weight: .medium))
+                                    .foregroundStyle(DesignText.onDark)
+                                    .padding(DesignSpacing.sm)
+                                    .background(Color.white.opacity(0.12))
+                                    .clipShape(Circle())
+                            }
+                            .buttonStyle(.plain)
+                            .transition(.scale.combined(with: .opacity))
+                        }
+
+                        // Sort menu
+                        Menu {
+                            ForEach(AlbumSortOrder.allCases, id: \.self) { order in
+                                Button {
+                                    guard sortOrder != order else { return }
+                                    sortOrderRaw = order.rawValue
+                                    focusIndex = 0
+                                    selectedLetter = nil
+                                    Task { await musicStore.loadAlbums(sortOrder: order) }
+                                } label: {
+                                    Label(order.label, systemImage: order.icon)
+                                }
+                            }
+                        } label: {
+                            Image(systemName: "arrow.up.arrow.down")
+                                .font(.system(size: 16, weight: .medium))
+                                .foregroundStyle(DesignText.onDark)
+                                .padding(DesignSpacing.sm)
+                                .background(Color.white.opacity(0.12))
+                                .clipShape(Circle())
+                        }
+                    }
                     .padding(.trailing, DesignSpacing.lg)
                     .padding(.bottom, DesignSpacing.md)
+                    .animation(.easeInOut(duration: 0.2), value: store.nowPlaying != nil)
                 }
             }
 
@@ -235,76 +314,33 @@ struct AlbumsView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
     }
 
-    // MARK: - Bottom nav
+    // MARK: - Alphabet scrubber support
 
-    private var bottomNav: some View {
-        VStack(spacing: 0) {
-            Spacer()
-
-            LinearGradient(
-                colors: [.clear, .black.opacity(0.75)],
-                startPoint: .top,
-                endPoint: .bottom
-            )
-            .frame(height: 80)
-            .overlay(alignment: .bottom) {
-                HStack {
-                    Button { nav.isPopoverVisible = true } label: {
-                        Image(systemName: "line.3.horizontal")
-                            .font(.system(size: 16, weight: .medium))
-                            .foregroundStyle(DesignText.onDark)
-                            .frame(width: 32, height: 32)
-                    }
-                    .buttonStyle(.plain)
-
-                    Spacer()
-
-                    // Focus index dots
-                    albumDots
-
-                    Spacer()
-
-                    Text("navidrome-sync")
-                        .font(.system(size: 11, weight: .semibold))
-                        .tracking(DesignType.tracking(from: DesignType.sectionLabel))
-                        .textCase(.uppercase)
-                        .foregroundStyle(DesignText.onDark)
-                }
-                .padding(.horizontal, DesignSpacing.lg)
-                .padding(.bottom, DesignSpacing.md)
-            }
+    private var scrubberLetters: [String] {
+        let isArtistSort = sortOrder == .alphabeticalByArtist
+        var seen = Set<String>()
+        var result: [String] = []
+        for album in albums {
+            let raw = isArtistSort ? album.artist : album.name
+            let first = raw.prefix(1).uppercased()
+            let token = first.first?.isLetter == true ? first : "#"
+            if seen.insert(token).inserted { result.append(token) }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-
-        // Nav popover
-        .overlay(alignment: .bottomLeading) {
-            NavPopoverView(
-                isVisible: Binding(
-                    get: { nav.isPopoverVisible },
-                    set: { nav.isPopoverVisible = $0 }
-                ),
-                crate: crateState.current,
-                onNavigate: { nav.handlePopoverSelection($0) }
-            )
-        }
+        return result
     }
 
-    // MARK: - Album position dots
-
-    private var albumDots: some View {
-        // Show a sliding window of up to 9 dots around the focused album
-        let maxDots  = 9
-        let half     = maxDots / 2
-        let start    = max(0, min(focusIndex - half, albums.count - maxDots))
-        let end      = min(albums.count, start + maxDots)
-
-        return HStack(spacing: 4) {
-            ForEach(start..<end, id: \.self) { i in
-                let isActive = i == focusIndex
-                Circle()
-                    .fill(getCrateColor(albumId: albums[i].id).dot)
-                    .frame(width: isActive ? 8 : 5, height: isActive ? 8 : 5)
-                    .animation(DesignAnim.crateColor, value: focusIndex)
+    private func jumpToLetter(_ letter: String) {
+        let isArtistSort = sortOrder == .alphabeticalByArtist
+        let token = letter.first?.isLetter == true ? letter : "#"
+        if let idx = albums.firstIndex(where: { album in
+            let raw = isArtistSort ? album.artist : album.name
+            let first = raw.prefix(1).uppercased()
+            let t = first.first?.isLetter == true ? first : "#"
+            return t == token
+        }) {
+            withAnimation(.spring(response: 0.35, dampingFraction: 0.75)) {
+                focusIndex = idx
+                dragOffset = 0
             }
         }
     }

@@ -20,6 +20,8 @@ struct SettingsView: View {
     @State private var showClearAllAlert = false
     @State private var showSyncURLEditor = false
 
+    @AppStorage("albumIsGrid") private var isGrid: Bool = false
+
     // Crate color override index (-1 = Auto)
     @State private var crateOverrideIndex: Int = {
         if UserDefaults.standard.bool(forKey: "crateColorOverride_set") {
@@ -71,6 +73,19 @@ struct SettingsView: View {
 
                             crateColorPicker
                                 .padding(.bottom, DesignSpacing.xs)
+                        }
+                        .listRowBackground(DesignBg.card)
+
+                        VStack(alignment: .leading, spacing: DesignSpacing.sm) {
+                            Text("Album View")
+                                .font(.system(size: 15))
+                                .foregroundStyle(DesignText.primary)
+
+                            Picker("Album View", selection: $isGrid) {
+                                Text("Crate Flow").tag(false)
+                                Text("Grid").tag(true)
+                            }
+                            .pickerStyle(.segmented)
                         }
                         .listRowBackground(DesignBg.card)
                     } header: {

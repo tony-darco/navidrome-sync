@@ -13,6 +13,7 @@ struct NavPopoverView: View {
     @Binding var isVisible: Bool
     let crate: CrateColorSet
     let onNavigate: (NavPopoverDestination) -> Void
+    var bottomInset: CGFloat = DesignDim.bottomNavHeight + DesignSpacing.sm
 
     @State private var appeared = false
 
@@ -67,7 +68,7 @@ struct NavPopoverView: View {
                 .shadow(color: .black.opacity(0.18), radius: 12, x: 0, y: 4)
                 // Anchored just above the bottom nav, inset from the left rail
                 .padding(.leading, DesignDim.sideBarWidth + DesignSpacing.md)
-                .padding(.bottom, DesignDim.bottomNavHeight + DesignSpacing.sm)
+                .padding(.bottom, bottomInset)
                 .scaleEffect(appeared ? 1.0 : 0.85, anchor: .bottomLeading)
                 .opacity(appeared ? 1.0 : 0.0)
                 .animation(DesignAnim.popoverIn, value: appeared)
