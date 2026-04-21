@@ -14,3 +14,5 @@ apple-touch-icon.png
 static/favicon*.png
 web/public/favicon*.png
 web/public/apple-touch-icon.png
+claude.md
+sync_to_xcode.sh
