@@ -50,6 +50,7 @@ struct ArtistsView: View {
                 }
                 .listStyle(.plain)
                 .scrollContentBackground(.hidden)
+                .miniPlayerScrollObserver()
                 .onChange(of: selectedLetter) { _, newValue in
                     if let letter = newValue {
                         withAnimation {

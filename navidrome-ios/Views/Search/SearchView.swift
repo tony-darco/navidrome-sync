@@ -3,14 +3,32 @@ import SwiftUI
 struct SearchView: View {
     @EnvironmentObject private var store: SyncStore
     @State private var query = ""
+    @State private var artists: [ArtistID3] = []
     @State private var albums: [Album] = []
     @State private var songs: [Song] = []
     @State private var isSearching = false
     @State private var hasSearched = false
+    @State private var searchTask: Task<Void, Never>?
+
+    private var hasResults: Bool { !artists.isEmpty || !albums.isEmpty || !songs.isEmpty }
 
     var body: some View {
+        ZStack(alignment: .bottom) {
         NavigationStack {
             List {
+                if !artists.isEmpty {
+                    Section("Artists") {
+                        ForEach(artists) { artist in
+                            NavigationLink(value: artist) {
+                                ArtistRowView(artist: artist)
+                            }
+                            .listRowBackground(Color.clear)
+                            .listRowInsets(EdgeInsets())
+                            .listRowSeparator(.hidden)
+                        }
+                    }
+                }
+
                 if !albums.isEmpty {
                     Section("Albums") {
                         ForEach(albums) { album in
@@ -34,7 +52,7 @@ struct SearchView: View {
                     }
                 }
 
-                if hasSearched && albums.isEmpty && songs.isEmpty && !isSearching {
+                if hasSearched && !hasResults && !isSearching {
                     HStack {
                         Spacer()
                         VStack(spacing: 8) {
@@ -54,34 +72,60 @@ struct SearchView: View {
             }
             .listStyle(.plain)
             .scrollContentBackground(.hidden)
+            .miniPlayerScrollObserver()
             .overlay {
-                if !hasSearched && albums.isEmpty && songs.isEmpty {
-                    VStack(spacing: 12) {
-                        Image(systemName: "magnifyingglass")
-                            .font(.system(size: 48))
-                            .foregroundStyle(.secondary)
-                        Text("Search for albums and songs")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
+                if !hasSearched && !hasResults {
+                    GeometryReader { geo in
+                        VStack {
+                            Spacer()
+                            Image(systemName: "magnifyingglass")
+                                .font(.system(size: 48))
+                                .foregroundStyle(.secondary)
+                            Text("Search for artists, albums, and songs")
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                                .padding(.top, 8)
+                            Spacer()
+                        }
+                        .frame(width: geo.size.width, height: geo.size.height)
                     }
                 }
             }
             .background { store.dominantBackgroundColor.ignoresSafeArea() }
             .navigationTitle("Search")
-            .searchable(text: $query, prompt: "Albums, songs...")
+            .searchable(text: $query, prompt: "Artists, albums, songs...")
             .onSubmit(of: .search) {
-                Task { await performSearch() }
+                scheduleSearch(immediate: true)
             }
             .onChange(of: query) { _, newValue in
                 if newValue.isEmpty {
+                    searchTask?.cancel()
+                    artists = []
                     albums = []
                     songs = []
                     hasSearched = false
+                } else {
+                    scheduleSearch(immediate: false)
                 }
+            }
+            .navigationDestination(for: ArtistID3.self) { artist in
+                ArtistDetailView(artistId: artist.id, artistName: artist.name)
             }
             .navigationDestination(for: Album.self) { album in
                 AlbumDetailView(albumId: album.id)
             }
+        }
+        } // ZStack
+    }
+
+    private func scheduleSearch(immediate: Bool) {
+        searchTask?.cancel()
+        searchTask = Task {
+            if !immediate {
+                try? await Task.sleep(for: .milliseconds(350))
+            }
+            guard !Task.isCancelled else { return }
+            await performSearch()
         }
     }
 
@@ -93,6 +137,7 @@ struct SearchView: View {
         defer { isSearching = false }
         do {
             let result = try await NavidromeClient.shared.search(query: trimmed)
+            artists = result.artists
             albums = result.albums
             songs = result.songs
         } catch {

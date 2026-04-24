@@ -202,6 +202,7 @@ struct SettingsView: View {
                 }
             }
             .scrollContentBackground(.hidden)
+            .miniPlayerScrollObserver()
             .background { store.dominantBackgroundColor.ignoresSafeArea() }
             .navigationTitle("Settings")
             .alert("Clear All Downloads?", isPresented: $showClearAllAlert) {
