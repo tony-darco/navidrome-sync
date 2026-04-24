@@ -10,12 +10,21 @@ struct ContentView: View {
     var body: some View {
         ZStack(alignment: .bottom) {
             TabView(selection: $selectedTab) {
-                NowPlayingView()
-                    .tag(0)
-                    .tabItem {
-                        Label("Now Playing", systemImage: "music.note")
+                NowPlayingView(
+                    onNavigateToAlbum: { albumId in
+                        withAnimation(.easeInOut(duration: 0.25)) { selectedTab = 1 }
+                        libraryPath.append(Album.navigationPlaceholder(id: albumId))
+                    },
+                    onNavigateToArtist: { artistId, artistName in
+                        withAnimation(.easeInOut(duration: 0.25)) { selectedTab = 1 }
+                        libraryPath.append(ArtistID3(id: artistId, name: artistName))
                     }
-                    .toolbarBackground(.visible, for: .tabBar)
+                )
+                .tag(0)
+                .tabItem {
+                    Label("Now Playing", systemImage: "music.note")
+                }
+                .toolbarBackground(.visible, for: .tabBar)
 
                 NavigationStack(path: $libraryPath) {
                     LibraryView()
@@ -49,7 +58,7 @@ struct ContentView: View {
 
             // Persistent mini player bar above tab bar (hidden on Now Playing tab)
             if store.nowPlaying != nil && selectedTab != 0 {
-                NowPlayingBar(selectedTab: $selectedTab)
+                NowPlayingBar(selectedTab: $selectedTab, libraryPath: $libraryPath)
                     .padding(.bottom, 49) // tab bar height
                     .transition(.move(edge: .bottom).combined(with: .opacity))
             }
@@ -83,8 +92,7 @@ struct ContentView: View {
 struct NowPlayingBar: View {
     @EnvironmentObject private var store: SyncStore
     @Binding var selectedTab: Int
-    @State private var showAlbumDetail = false
-    @State private var showArtistDetail = false
+    @Binding var libraryPath: NavigationPath
 
     var body: some View {
         if let song = store.nowPlaying {
@@ -106,7 +114,8 @@ struct NowPlayingBar: View {
                     VStack(alignment: .leading, spacing: 2) {
                         if let albumId = song.albumId, !albumId.isEmpty {
                             Button {
-                                showAlbumDetail = true
+                                withAnimation(.easeInOut(duration: 0.25)) { selectedTab = 1 }
+                                libraryPath.append(Album.navigationPlaceholder(id: albumId))
                             } label: {
                                 Text(song.title)
                                     .font(.subheadline)
@@ -125,7 +134,8 @@ struct NowPlayingBar: View {
                         
                         if let artistId = song.artistId, !artistId.isEmpty {
                             Button {
-                                showArtistDetail = true
+                                withAnimation(.easeInOut(duration: 0.25)) { selectedTab = 1 }
+                                libraryPath.append(ArtistID3(id: artistId, name: song.artist))
                             } label: {
                                 Text(song.artist)
                                     .font(.caption)
@@ -183,24 +193,19 @@ struct NowPlayingBar: View {
                 .padding(.horizontal, 16)
                 .padding(.vertical, 10)
                 .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 28))
-                .sheet(isPresented: $showAlbumDetail) {
-                    if let albumId = song.albumId, !albumId.isEmpty {
-                        NavigationStack {
-                            AlbumDetailView(albumId: albumId)
-                        }
-                    }
-                }
-                .sheet(isPresented: $showArtistDetail) {
-                    if let artistId = song.artistId, !artistId.isEmpty {
-                        NavigationStack {
-                            ArtistDetailView(artistId: artistId, artistName: song.artist)
-                        }
-                    }
-                }
             } else {
                 // Fallback on earlier versions
             }
         }
+    }
+}
+
+// MARK: - Navigation helpers
+
+private extension Album {
+    /// Creates a minimal placeholder used purely for navigation; `AlbumDetailView` only needs the id.
+    static func navigationPlaceholder(id: String) -> Album {
+        Album(id: id, name: "", artist: "", coverArt: "", songCount: 0, year: nil)
     }
 }
 
