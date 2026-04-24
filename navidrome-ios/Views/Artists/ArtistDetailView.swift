@@ -13,7 +13,8 @@ struct ArtistDetailView: View {
     @State private var isLoading = true
 
     private let columns = [
-        GridItem(.adaptive(minimum: 160), spacing: 16)
+        GridItem(.flexible(), spacing: 10),
+        GridItem(.flexible(), spacing: 10)
     ]
 
     var body: some View {
@@ -24,23 +25,29 @@ struct ArtistDetailView: View {
             } else {
                 VStack(spacing: 0) {
                     artistHeader
-                    if !topSongs.isEmpty {
-                        topSongsSection
+                    VStack(spacing: 0) {
+                        if !topSongs.isEmpty {
+                            topSongsSection
+                                .padding(.top, 16)
+                        }
+                        if !albums.isEmpty {
+                            albumsSection
+                        }
+                        if topSongs.isEmpty && albums.isEmpty {
+                            Text("No content found")
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                                .padding(.top, 40)
+                        }
                     }
-                    if !albums.isEmpty {
-                        albumsSection
-                    }
-                    if topSongs.isEmpty && albums.isEmpty {
-                        Text("No content found")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                            .padding(.top, 40)
-                    }
+                    .background(Color(.systemGroupedBackground))
                 }
             }
         }
+        .ignoresSafeArea(edges: .top)
         .navigationTitle("")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbarBackground(.hidden, for: .navigationBar)
         .task {
             await loadArtist()
         }
@@ -49,107 +56,121 @@ struct ArtistDetailView: View {
     // MARK: - Artist Header
 
     private var artistHeader: some View {
-        ZStack(alignment: .bottomLeading) {
-            if let imageURL = artistInfo?.imageURL, let url = URL(string: imageURL) {
-                AsyncImage(url: url) { phase in
-                    switch phase {
-                    case .success(let image):
-                        image
-                            .resizable()
-                            .aspectRatio(contentMode: .fill)
-                    default:
-                        artistPlaceholder
+        GeometryReader { geo in
+            ZStack(alignment: .bottomLeading) {
+                // Background image — clipped via its own frame, not the ZStack
+                if let imageURL = artistInfo?.imageURL, let url = URL(string: imageURL) {
+                    AsyncImage(url: url) { phase in
+                        switch phase {
+                        case .success(let image):
+                            image
+                                .resizable()
+                                .aspectRatio(contentMode: .fill)
+                                .frame(width: geo.size.width, height: 320)
+                                .clipped()
+                        default:
+                            Rectangle().fill(Color(.systemGray6))
+                                .frame(width: geo.size.width, height: 320)
+                        }
                     }
+                } else {
+                    Rectangle().fill(Color(.systemGray6))
+                        .frame(width: geo.size.width, height: 320)
                 }
-            } else {
-                artistPlaceholder
-            }
 
-            // Gradient overlay for text legibility
-            LinearGradient(
-                colors: [.clear, .black.opacity(0.7)],
-                startPoint: .center,
-                endPoint: .bottom
-            )
+                // Gradient and text render freely — not clipped
+                LinearGradient(
+                    stops: [
+                        .init(color: .clear, location: 0.0),
+                        .init(color: .black.opacity(0.3), location: 0.4),
+                        .init(color: .black.opacity(0.92), location: 1.0)
+                    ],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+                .frame(width: geo.size.width, height: 320)
 
-            Text(artistName)
-                .font(.system(size: 34, weight: .bold))
-                .foregroundStyle(.white)
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(artistName)
+                        .font(.system(size: 38, weight: .heavy))
+                        .foregroundStyle(.white)
+                        .minimumScaleFactor(0.6)
+                        .lineLimit(2)
+                }
                 .padding(.horizontal, 16)
                 .padding(.bottom, 16)
-        }
-        .frame(height: 400)
-        .frame(maxWidth: .infinity)
-        .clipped()
-    }
-
-    private var artistPlaceholder: some View {
-        Rectangle()
-            .fill(Color(.systemGray5))
-            .overlay {
-                Image(systemName: "person.fill")
-                    .font(.system(size: 60))
-                    .foregroundStyle(.secondary)
             }
+            .frame(width: geo.size.width, height: 320)
+        }
+        .frame(height: 320)
+        .ignoresSafeArea(edges: .top)
     }
 
     // MARK: - Top Songs
 
     private var topSongsSection: some View {
         VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                Text("Top Songs")
-                    .font(.title2)
-                    .fontWeight(.bold)
-                Image(systemName: "chevron.right")
-                    .font(.title3.weight(.semibold))
-                    .foregroundStyle(.secondary)
-            }
-            .padding(.horizontal)
+            Text("POPULAR")
+                .font(.system(size: 11, weight: .semibold))
+                .kerning(1.4)
+                .foregroundStyle(Color.red)
+                .padding(.horizontal, 16)
 
-            let songRows = min(topSongs.count, 4)
             ScrollView(.horizontal, showsIndicators: false) {
-                LazyHStack(alignment: .top, spacing: 12) {
-                    ForEach(0..<(topSongs.count + songRows - 1) / songRows, id: \.self) { col in
+                LazyHStack(alignment: .top, spacing: 0) {
+                    ForEach(0..<columnCount, id: \.self) { col in
                         VStack(spacing: 0) {
-                            ForEach(0..<songRows, id: \.self) { row in
-                                let idx = col * songRows + row
+                            ForEach(0..<4, id: \.self) { row in
+                                let idx = col * 4 + row
                                 if idx < topSongs.count {
                                     Button {
                                         playSong(topSongs[idx], at: idx)
                                     } label: {
-                                        songRow(topSongs[idx])
+                                        songRow(topSongs[idx], index: idx)
                                     }
                                     .buttonStyle(.plain)
                                 }
                             }
                         }
+                        .frame(width: UIScreen.main.bounds.width - 32)
                     }
                 }
-                .padding(.horizontal)
+                .padding(.horizontal, 16)
             }
+
+            HStack {
+                Spacer()
+                Text("SEE MORE")
+                    .font(.system(size: 11, weight: .semibold))
+                    .kerning(1.0)
+                    .foregroundStyle(Color.red)
+            }
+            .padding(.horizontal, 16)
+            .padding(.bottom, 10)
         }
         .padding(.bottom, 24)
     }
 
-    private func songRow(_ song: Song) -> some View {
+    private var columnCount: Int {
+        (topSongs.count + 3) / 4
+    }
+
+    private func songRow(_ song: Song, index: Int) -> some View {
         let isNowPlaying = song.id == store.nowPlaying?.songId
         return HStack(spacing: 12) {
             CoverArtImage(id: song.coverArt, size: 80, isNowPlaying: isNowPlaying, isPlaying: store.isPlaying)
-                .frame(width: 44, height: 44)
-                .clipShape(RoundedRectangle(cornerRadius: 6))
+                .frame(width: 32, height: 32)
+                .clipShape(RoundedRectangle(cornerRadius: 4))
 
-            VStack(alignment: .leading, spacing: 2) {
-                Text(song.title)
-                    .font(.body)
-                    .lineLimit(1)
-                Text(song.album)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-            }
+            Text(song.title)
+                .font(.system(size: 15, weight: .semibold))
+                .lineLimit(1)
 
             Spacer()
+
+            Text(formatDuration(song.duration))
+                .font(.system(size: 13))
+                .foregroundStyle(.secondary)
 
             DownloadStatusIcon(task: downloadManager.taskMap[song.id])
 
@@ -183,33 +204,35 @@ struct ArtistDetailView: View {
                     .foregroundStyle(.secondary)
             }
         }
-        .frame(width: 300)
-        .padding(.vertical, 8)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 6)
     }
 
     // MARK: - Albums
 
     private var albumsSection: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("Albums")
-                .font(.title2)
-                .fontWeight(.bold)
-                .padding(.horizontal)
+            Text("ALBUMS")
+                .font(.system(size: 11, weight: .semibold))
+                .kerning(1.4)
+                .foregroundStyle(Color.red)
+                .padding(.horizontal, 16)
+                .padding(.bottom, 4)
 
-            LazyVGrid(columns: columns, spacing: 16) {
+            LazyVGrid(columns: columns, spacing: 10) {
                 ForEach(albums) { album in
                     NavigationLink(value: album) {
                         VStack(alignment: .leading, spacing: 6) {
                             CoverArtImage(id: album.coverArt, size: 300)
                                 .aspectRatio(1, contentMode: .fill)
-                                .clipShape(RoundedRectangle(cornerRadius: 8))
+                                .clipShape(RoundedRectangle(cornerRadius: 6))
                             Text(album.name)
-                                .font(.subheadline)
-                                .fontWeight(.medium)
+                                .font(.system(size: 13, weight: .semibold))
+                                .foregroundStyle(.primary)
                                 .lineLimit(1)
                             if let year = album.year {
                                 Text(String(year))
-                                    .font(.caption)
+                                    .font(.system(size: 12))
                                     .foregroundStyle(.secondary)
                                     .lineLimit(1)
                             }
@@ -218,7 +241,7 @@ struct ArtistDetailView: View {
                     .buttonStyle(.plain)
                 }
             }
-            .padding(.horizontal)
+            .padding(.horizontal, 14)
         }
         .padding(.bottom, 24)
     }

@@ -93,6 +93,7 @@ struct LibraryView: View {
             store.dominantBackgroundColor
                 .ignoresSafeArea()
         }
+        .miniPlayerScrollObserver()
         .navigationTitle("Library")
         .navigationBarTitleDisplayMode(.large)
         .navigationDestination(for: String.self) { destination in

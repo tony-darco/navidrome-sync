@@ -122,7 +122,7 @@ final class AudioPlayer: ObservableObject {
 
     // MARK: - Playback controls
 
-    func play(url: URL, position: Double = 0) {
+    func play(url: URL, position: Double = 0, autoPlay: Bool = true) {
         itemStatusObservation?.invalidate()
         let item = AVPlayerItem(url: url)
         player.replaceCurrentItem(with: item)
@@ -132,7 +132,9 @@ final class AudioPlayer: ObservableObject {
                 if position > 0 {
                     self?.seek(to: position)
                 }
-                self?.player.play()
+                if autoPlay {
+                    self?.player.play()
+                }
             }
         }
     }

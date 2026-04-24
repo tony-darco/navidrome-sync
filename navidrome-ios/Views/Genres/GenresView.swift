@@ -54,6 +54,7 @@ struct GenresView: View {
         }
         .listStyle(.plain)
         .scrollContentBackground(.hidden)
+        .miniPlayerScrollObserver()
         .background { store.dominantBackgroundColor.ignoresSafeArea() }
         .navigationTitle("Genres")
         .navigationDestination(for: Genre.self) { genre in

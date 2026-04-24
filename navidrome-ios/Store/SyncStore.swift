@@ -27,6 +27,9 @@ final class SyncStore: ObservableObject {
 
     @Published var lastPlaylistInvalidation: PlaylistInvalidation? = nil
 
+    /// Whether the mini player pill is collapsed (scroll-hidden).
+    @Published var miniPlayerCollapsed: Bool = false
+
     /// Dominant color extracted from the current album art.
     @Published var dominantColor: Color = .clear
     /// Darkened version of dominantColor safe for backgrounds with white text.
@@ -417,14 +420,14 @@ final class SyncStore: ObservableObject {
 
     // MARK: - Private helpers
 
-    private func loadAndPlay(_ song: NowPlayingSong) {
+    private func loadAndPlay(_ song: NowPlayingSong, autoPlay: Bool = true) {
         nowPlaying = song
         scrobbledSongId = nil
         // Prefer local file if downloaded, otherwise stream.
         let url: URL? = downloadManager.localURL(for: song.songId)
             ?? navidromeClient.streamURL(songId: song.songId)
         guard let url else { return }
-        audioPlayer.play(url: url, position: song.positionSecs)
+        audioPlayer.play(url: url, position: song.positionSecs, autoPlay: autoPlay)
         updateLockScreen(song: song)
         Task {
             let artwork = await navidromeClient.fetchCoverArt(id: song.coverArtId, size: 300)
@@ -609,14 +612,10 @@ final class SyncStore: ObservableObject {
                 }
             }
             
-            // Only auto-play if the hub says the song was actually playing
+            // Load the player when becoming active so play/pause work immediately.
+            // Only auto-start if the hub says the song was actually playing.
             if justBecameActive {
-                if song.isPlaying == true {
-                    loadAndPlay(song)
-                } else {
-                    // Load the song metadata but don't start playback
-                    position = song.positionSecs
-                }
+                loadAndPlay(song, autoPlay: song.isPlaying == true)
             }
         } else {
             if myRole == "observer" || justBecameActive {

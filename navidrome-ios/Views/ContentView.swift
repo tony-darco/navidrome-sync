@@ -34,6 +34,9 @@ struct ContentView: View {
                     Label("Library", systemImage: "books.vertical")
                 }
                 .toolbarBackground(.visible, for: .tabBar)
+                .safeAreaInset(edge: .bottom) {
+                    Color.clear.frame(height: store.nowPlaying != nil ? (store.miniPlayerCollapsed ? 6 : 68) : 0)
+                }
 
                 SearchView()
                     .tag(2)
@@ -41,6 +44,9 @@ struct ContentView: View {
                         Label("Search", systemImage: "magnifyingglass")
                     }
                     .toolbarBackground(.visible, for: .tabBar)
+                    .safeAreaInset(edge: .bottom) {
+                        Color.clear.frame(height: store.nowPlaying != nil ? (store.miniPlayerCollapsed ? 6 : 68) : 0)
+                }
 
                 SettingsView(isLoggedIn: $isLoggedIn)
                     .tag(3)
@@ -48,6 +54,9 @@ struct ContentView: View {
                         Label("Settings", systemImage: "gear")
                     }
                     .toolbarBackground(.visible, for: .tabBar)
+                    .safeAreaInset(edge: .bottom) {
+                        Color.clear.frame(height: store.nowPlaying != nil ? (store.miniPlayerCollapsed ? 6 : 68) : 0)
+                }
             }
             .tint(Color.brandPink)
             .toolbarBackground(
@@ -56,11 +65,23 @@ struct ContentView: View {
             )
             .toolbarColorScheme(.dark, for: .tabBar)
 
-            // Persistent mini player bar above tab bar (hidden on Now Playing tab)
+            // Persistent mini player above tab bar (hidden on Now Playing tab)
             if store.nowPlaying != nil && selectedTab != 0 {
-                NowPlayingBar(selectedTab: $selectedTab, libraryPath: $libraryPath)
-                    .padding(.bottom, 49) // tab bar height
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                VStack(spacing: 0) {
+                    if store.miniPlayerCollapsed {
+                        // Collapsed: thin capsule playbar sitting at the top of the tab bar
+                        MiniPlayerPlaybar()
+                            .padding(.horizontal, 75)
+                            .transition(.opacity)
+                    } else {
+                        // Expanded: full pill with progress bar embedded inside
+                        NowPlayingBar(selectedTab: $selectedTab, libraryPath: $libraryPath)
+                            .padding(.horizontal, 12)
+                            .transition(.move(edge: .bottom).combined(with: .opacity))
+                    }
+                }
+                .padding(.bottom, 49) // tab bar height
+                .animation(.easeInOut(duration: 0.2), value: store.miniPlayerCollapsed)
             }
 
             // Offline mode banner
@@ -84,6 +105,30 @@ struct ContentView: View {
             }
         }
         .animation(.easeInOut(duration: 0.25), value: selectedTab)
+        .ignoresSafeArea(.keyboard)
+    }
+}
+
+// MARK: - Collapsed capsule playbar (shown at top of tab bar when pill is hidden)
+
+struct MiniPlayerPlaybar: View {
+    @EnvironmentObject private var store: SyncStore
+
+    var body: some View {
+        if let song = store.nowPlaying {
+            let duration = max(Double(song.durationSecs), 1)
+            let progress = min(store.position / duration, 1)
+
+            GeometryReader { geo in
+                ZStack(alignment: .leading) {
+                    Color.brandPink.opacity(0.25)
+                    Color.brandPink
+                        .frame(width: geo.size.width * progress)
+                }
+            }
+            .frame(height: 4)
+            .clipShape(Capsule())
+        }
     }
 }
 
@@ -97,8 +142,19 @@ struct NowPlayingBar: View {
     var body: some View {
         if let song = store.nowPlaying {
             if #available(iOS 26.0, *) {
-                HStack(spacing: 12) {
-                    // Cover art — navigates to Now Playing tab
+                VStack(spacing: 0) {
+                    // Thin progress bar embedded at the top of the pill
+                    let duration = max(Double(song.durationSecs), 1)
+                    let progress = min(store.position / duration, 1)
+                    GeometryReader { geo in
+                        Color.brandPink
+                            .frame(width: geo.size.width * progress)
+                    }
+                    .frame(height: 3)
+                    .padding(.horizontal, 45)
+
+                    HStack(spacing: 12) {
+                    // Cover art
                     Button {
                         withAnimation(.easeInOut(duration: 0.25)) {
                             selectedTab = 0
@@ -109,7 +165,7 @@ struct NowPlayingBar: View {
                             .clipShape(RoundedRectangle(cornerRadius: 6))
                     }
                     .buttonStyle(.plain)
-                    
+
                     // Song info — title and artist are separate tap targets
                     VStack(alignment: .leading, spacing: 2) {
                         if let albumId = song.albumId, !albumId.isEmpty {
@@ -131,67 +187,67 @@ struct NowPlayingBar: View {
                                 .lineLimit(1)
                                 .foregroundStyle(.primary)
                         }
-                        
-                        if let artistId = song.artistId, !artistId.isEmpty {
-                            Button {
+
+                        Button {
+                            if let artistId = song.artistId, !artistId.isEmpty {
                                 withAnimation(.easeInOut(duration: 0.25)) { selectedTab = 1 }
                                 libraryPath.append(ArtistID3(id: artistId, name: song.artist))
-                            } label: {
-                                Text(song.artist)
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                                    .lineLimit(1)
+                            } else {
+                                let firstName = song.artist.split(separator: ";").first.map { $0.trimmingCharacters(in: .whitespaces) } ?? song.artist
+                                Task {
+                                    if let found = try? await NavidromeClient.shared.searchArtist(name: firstName) {
+                                        withAnimation(.easeInOut(duration: 0.25)) { selectedTab = 1 }
+                                        libraryPath.append(ArtistID3(id: found.id, name: found.name))
+                                    }
+                                }
                             }
-                            .buttonStyle(.plain)
-                        } else {
+                        } label: {
                             Text(song.artist)
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                                 .lineLimit(1)
                         }
+                        .buttonStyle(.plain)
                     }
-                    
+
                     Spacer()
-                    
-                    // Playback controls — shared GlassEffectContainer for morph continuity
-                    if #available(iOS 26.0, *) {
-                        GlassEffectContainer {
-                            HStack(spacing: 0) {
-                                Button {
-                                    store.prev()
-                                } label: {
-                                    Image(systemName: "backward.fill")
-                                        .font(.title3)
-                                        .frame(width: 36, height: 36)
-                                }
-                                .glassEffect(.regular.interactive(), in: Circle())
-                                
-                                Button {
-                                    if store.isPlaying { store.pause() } else { store.play() }
-                                } label: {
-                                    Image(systemName: store.isPlaying ? "pause.fill" : "play.fill")
-                                        .font(.title3)
-                                        .frame(width: 36, height: 36)
-                                        .contentTransition(.symbolEffect(.replace))
-                                }
-                                .glassEffect(.regular.interactive(), in: Circle())
-                                
-                                Button {
-                                    store.next()
-                                } label: {
-                                    Image(systemName: "forward.fill")
-                                        .font(.title3)
-                                        .frame(width: 36, height: 36)
-                                }
-                                .glassEffect(.regular.interactive(), in: Circle())
-                            }
+
+                    // Playback controls — plain icons, brandPink tint, no circles
+                    HStack(spacing: 4) {
+                        Button {
+                            store.prev()
+                        } label: {
+                            Image(systemName: "backward.end.fill")
+                                .font(.title3)
+                                .frame(width: 36, height: 36)
                         }
-                    } else {
-                        // Fallback on earlier versions
+
+                        Button {
+                            if store.isPlaying { store.pause() } else { store.play() }
+                        } label: {
+                            Image(systemName: store.isPlaying ? "pause.fill" : "play.fill")
+                                .font(.title3)
+                                .frame(width: 36, height: 36)
+                                .contentTransition(.symbolEffect(.replace))
+                        }
+
+                        Button {
+                            store.next()
+                        } label: {
+                            Image(systemName: "forward.end.fill")
+                                .font(.title3)
+                                .frame(width: 36, height: 36)
+                        }
                     }
+                    .tint(Color.brandPink)
                 }
                 .padding(.horizontal, 16)
                 .padding(.vertical, 10)
+                } // end VStack
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    withAnimation(.easeInOut(duration: 0.25)) { selectedTab = 0 }
+                }
                 .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 28))
             } else {
                 // Fallback on earlier versions

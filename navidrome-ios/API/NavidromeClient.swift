@@ -102,14 +102,15 @@ actor NavidromeClient: NavidromeClientProtocol {
         return (album: raw.toAlbum(), songs: raw.song ?? [])
     }
 
-    func search(query: String) async throws -> (albums: [Album], songs: [Song]) {
+    func search(query: String) async throws -> (artists: [ArtistID3], albums: [Album], songs: [Song]) {
         let resp = try await request(path: "/rest/search3.view", params: [
             "query": query,
+            "artistCount": "10",
             "albumCount": "20",
             "songCount": "20",
         ])
         let result = resp.searchResult3
-        return (albums: result?.album ?? [], songs: result?.song ?? [])
+        return (artists: result?.artist ?? [], albums: result?.album ?? [], songs: result?.song ?? [])
     }
 
     // MARK: - Artist APIs
@@ -117,6 +118,16 @@ actor NavidromeClient: NavidromeClientProtocol {
     func getArtists() async throws -> [ArtistIndex] {
         let resp = try await request(path: "/rest/getArtists.view")
         return resp.artists?.index ?? []
+    }
+
+    func searchArtist(name: String) async throws -> ArtistID3? {
+        let resp = try await request(path: "/rest/search3.view", params: [
+            "query": name,
+            "artistCount": "1",
+            "albumCount": "0",
+            "songCount": "0",
+        ])
+        return resp.searchResult3?.artist?.first
     }
 
     // MARK: - Genre APIs

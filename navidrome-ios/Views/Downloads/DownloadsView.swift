@@ -116,6 +116,7 @@ struct DownloadsView: View {
         }
         .listStyle(.plain)
         .scrollContentBackground(.hidden)
+        .miniPlayerScrollObserver()
         .background { store.dominantBackgroundColor.ignoresSafeArea() }
         .navigationTitle("Downloads")
         .toolbar {

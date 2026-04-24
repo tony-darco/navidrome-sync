@@ -22,6 +22,7 @@ struct PlaylistsView: View {
         }
         .listStyle(.plain)
         .scrollContentBackground(.hidden)
+        .miniPlayerScrollObserver()
         .background { store.dominantBackgroundColor.ignoresSafeArea() }
         .searchable(text: $searchText, prompt: "Search playlists")
         .navigationTitle("Playlists")

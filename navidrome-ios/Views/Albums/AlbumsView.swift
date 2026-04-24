@@ -94,6 +94,7 @@ struct AlbumsView: View {
             }
         }
         .background { store.dominantBackgroundColor.ignoresSafeArea() }
+        .miniPlayerScrollObserver()
         .navigationTitle("Albums")
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
