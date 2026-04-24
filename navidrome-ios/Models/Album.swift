@@ -178,6 +178,7 @@ nonisolated struct AlbumWithSongs: Decodable, Sendable {
 nonisolated struct SearchResult3: Decodable, Sendable {
     let album: [Album]?
     let song: [Song]?
+    let artist: [ArtistID3]?
 }
 
 // MARK: - Playlist models

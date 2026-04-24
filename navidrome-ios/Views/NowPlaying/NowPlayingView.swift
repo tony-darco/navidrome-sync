@@ -85,20 +85,24 @@ struct NowPlayingView: View {
                         .lineLimit(1)
                 }
 
-                if let artistId = song.artistId, !artistId.isEmpty {
-                    Button { onNavigateToArtist?(artistId, song.artist) } label: {
-                        Text(song.artist)
-                            .font(.title3)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
+                Button {
+                    if let artistId = song.artistId, !artistId.isEmpty {
+                        onNavigateToArtist?(artistId, song.artist)
+                    } else {
+                        let firstName = song.artist.split(separator: ";").first.map { $0.trimmingCharacters(in: .whitespaces) } ?? song.artist
+                        Task {
+                            if let found = try? await NavidromeClient.shared.searchArtist(name: firstName) {
+                                onNavigateToArtist?(found.id, found.name)
+                            }
+                        }
                     }
-                    .buttonStyle(.plain)
-                } else {
+                } label: {
                     Text(song.artist)
                         .font(.title3)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
                 }
+                .buttonStyle(.plain)
 
                 if let albumId = song.albumId, !albumId.isEmpty {
                     Button { onNavigateToAlbum?(albumId) } label: {
